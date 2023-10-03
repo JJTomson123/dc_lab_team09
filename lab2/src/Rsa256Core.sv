@@ -44,7 +44,7 @@ module RsaPrep (
 localparam S_IDLE = 0;
 localparam S_CALC = 1;
 
-logic 
+logic y_text;
 
 always_comb begin
 
