@@ -184,13 +184,13 @@ localparam S_CALC = 1;
 
 logic state;
 logic [7:0]   count_r, count_w;
-logic [255:0] n_r, n_w;
+logic [255:0] n_r;
 logic [255:0] t_w;
 
 always_comb begin
 	count_w = count_r + 1;
-	if (o_t[255] || (o_t << 1) >= N) begin
-		t_w = o_t << 1 - N;
+	if (o_t[255] || (o_t << 1) >= n_r) begin
+		t_w = o_t << 1 - n_r;
 	end	else begin
 		t_w = o_t << 1;
 	end
@@ -211,18 +211,18 @@ always_ff @(posedge i_clk or posedge i_rst) begin
 				o_finished <= 0;
 				state      <= S_CALC;
 				count_r    <= 0;
-				N          <= i_n;
+				n_r        <= i_n;
 			end else begin
 				o_t        <= o_t;
 				o_finished <= o_finished;
 				state      <= state;
 				count_r    <= count_r;
-				N          <= N;
+				n_r        <= n_r;
 			end
 		end
 		S_CALC: begin
 			o_t <= t_w;
-			N   <= N;
+			n_r   <= n_r;
 			if (count_w == 0) begin
 				o_finished <= 1;
 				state      <= S_IDLE;
@@ -312,7 +312,7 @@ always_comb begin
 		if (count_r == 255) begin
 			state_w = S_IDLE;
 			finished_w = 1;
-			if (m_w >= N) begin
+			if (m_w >= n_r) begin
 				m_final = m_w - n_r;
 			end else begin
 				m_final = m_w;
