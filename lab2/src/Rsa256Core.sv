@@ -175,8 +175,8 @@ module RsaPrep (
 	input          i_start,
 	input  [255:0] i_b, // cipher text y
 	input  [255:0] i_n,
-	output [255:0] o_t, // t = y * 2^256
-	output         o_finished
+	output reg [255:0] o_t, // t = y * 2^256
+	output reg     o_finished
 );
 
 localparam S_IDLE = 0;
