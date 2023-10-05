@@ -143,20 +143,14 @@ end
 
 always_ff @(posedge i_clk or posedge i_rst) begin
 	if (i_rst) begin
-		t_mont_start <= 0;
-		m_mont_start <= 0;
 		o_finished <= 0;
-		prep_start <= 0;
 		o_a_pow_d <= 0;
 		t_r <= 0;
 		state_r <= S_IDLE;
 		count_r <= 0;
 	end
 	else begin
-		t_mont_start <= t_mont_start;
-		m_mont_start <= m_mont_start;
 		o_finished <= finish;
-		prep_start <= prep_start;
 		o_a_pow_d <= m_w;
 		t_r <= t_w;
 		state_r <= state_w;
