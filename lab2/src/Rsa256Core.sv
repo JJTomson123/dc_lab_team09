@@ -5,7 +5,7 @@ module Rsa256Core (
 	input  [255:0] i_a, // cipher text y
 	input  [255:0] i_d, // private key
 	input  [255:0] i_n,
-	output reg [255:0] o_a_pow_d, // plain text x
+	output [255:0] o_a_pow_d, // plain text x
 	output  reg      o_finished
 );
 
@@ -21,6 +21,10 @@ logic prep_finished, m_mont_finished, t_mont_finished, finish;
 logic prep_start, m_mont_start, t_mont_start;
 logic [7:0]  count_r, count_w;
 logic [255:0] t_r, t_w, t_prep, t_mont, m_r, m_w, m_mont;
+
+
+assign o_a_pow_d = m_r;
+
 
 RsaPrep rsa_prep(
 	.i_clk(i_clk), 
@@ -144,14 +148,14 @@ end
 always_ff @(posedge i_clk or posedge i_rst) begin
 	if (i_rst) begin
 		o_finished <= 0;
-		o_a_pow_d <= 0;
+		m_r <= 0;
 		t_r <= 0;
 		state_r <= S_IDLE;
 		count_r <= 0;
 	end
 	else begin
 		o_finished <= finish;
-		o_a_pow_d <= m_w;
+		m_r <= m_w;
 		t_r <= t_w;
 		state_r <= state_w;
 		count_r <= count_w;
@@ -161,7 +165,13 @@ end
 
 endmodule
 
+
+
+
 /////////////////////////////////////////////////////////////////////////////////
+
+
+
 
 module RsaPrep (
 	input          i_clk,
