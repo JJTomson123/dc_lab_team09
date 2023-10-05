@@ -5,8 +5,8 @@ module Rsa256Core (
 	input  [255:0] i_a, // cipher text y
 	input  [255:0] i_d, // private key
 	input  [255:0] i_n,
-	output [255:0] o_a_pow_d, // plain text x
-	output         o_finished
+	output reg [255:0] o_a_pow_d, // plain text x
+	output  reg      o_finished
 );
 
 // operations for RSA256 decryption
@@ -256,8 +256,8 @@ module RsaMont (
 	input  [255:0] i_a,
 	input  [255:0] i_b, // cipher text y
 	input  [255:0] i_n,
-	output [255:0] o_m, // t = y * 2^256
-	output         o_finished
+	output reg [255:0] o_m, // t = y * 2^256
+	output  reg       o_finished
 );
 
 
@@ -268,7 +268,7 @@ logic state_r, state_w;
 logic [7:0]   count_r, count_w;
 logic [255:0] n_r, n_w;
 logic [255:0] m_r, m_w, m_final;
-wire finished_w;
+logic finished_w;
 
 assign o_m = m_r;
 
