@@ -18,9 +18,9 @@ localparam S_CALC = 2'b11;
 
 logic [1:0] state_r, state_w;
 logic prep_finished, m_mont_finished, t_mont_finished, finish;
-logic prep_start, m_mont_start, t_mont_start;
+logic prep_start, prep_start_w, m_mont_start, m_mont_start_w, t_mont_start, t_mont_start_w;
 logic [7:0]  count_r, count_w;
-logic [255:0] t_r, t_w, t_prep, t_mont, m_r, m_w, m_mont;
+logic [255:0] y_r, y_w, t_r, t_w, t_prep, t_mont, m_r, m_w, m_mont;
 
 
 assign o_a_pow_d = m_r;
@@ -30,7 +30,7 @@ RsaPrep rsa_prep(
 	.i_clk(i_clk), 
 	.i_rst(i_rst), 
 	.i_start(prep_start), 
-	.i_b(i_a), 
+	.i_b(y_r), 
 	.i_n(i_n), 
 	.o_t(t_prep),
 	.o_finished(prep_finished) 
@@ -62,84 +62,87 @@ RsaMont t_rsa_mont(
 always_comb begin
 	case(state_r)
 	S_IDLE: begin
-		t_mont_start = 0;
-		m_mont_start = 0;
+		t_mont_start_w = 0;
+		m_mont_start_w = 0;
 		finish = 0;
 		if (i_start) begin
-			prep_start = 1;
+			prep_start_w = 1;
+			y_w = i_a;
 			m_w = 1;
 			t_w = 0;
 			state_w = S_PREP;
 			count_w = 0;
 		end
 		else begin
-			prep_start = 0;
+			prep_start_w = 0;
+			y_w = 0;
 			m_w = m_r;
 			t_w = t_r;
 			state_w = S_IDLE;
 			count_w = count_r;
-
 		end
 	end
 	S_PREP: begin
-		prep_start = 0;
+		prep_start_w = 0;
+		y_w = y_r;
 		finish = 0;
+		count_w = count_r;
 		if (prep_finished) begin
+			state_w = S_MONT;
+            t_mont_start_w = 1;
+			m_mont_start_w = 1;
 			m_w = m_r;
 			t_w = t_prep;
-            t_mont_start = 1;
-			m_mont_start = 1;
-			state_w = S_MONT;
-			count_w = count_r;
 		end
 		else begin
+			state_w = S_PREP;
+            t_mont_start_w = 0;
+			m_mont_start_w = 0;
 			t_w = t_r;
 			m_w = m_r;
-            t_mont_start = 0;
-			m_mont_start = 0;
-			state_w = S_PREP;
-			count_w = count_r;
 		end
 
 	end
 	S_MONT: begin
-		t_mont_start = 0;
-		m_mont_start = 0;
-		prep_start = 0;
+		prep_start_w = 0;
+		t_mont_start_w = 0;
+		m_mont_start_w = 0;
+		y_w = y_r;
 		finish = 0;
 		count_w = count_r;
 		if (m_mont_finished && t_mont_finished) begin
 			if (i_d[count_r]) begin
+				state_w = S_CALC;
 				m_w = m_mont;
 				t_w = t_mont;
-				state_w = S_CALC;
 			end else begin
+				state_w = S_CALC;
 				m_w = m_r;
 				t_w = t_mont;
-				state_w = S_CALC;
 			end
 		end else begin
+			state_w = S_MONT;
 			m_w = m_r;
 			t_w = t_r;
-			state_w = S_MONT;
 		end
 	end
 	S_CALC: begin
-		count_w = count_r + 1;
-		prep_start = 0;
+		prep_start_w = 0;
+		y_w = y_r;
 		m_w = m_r;
 		t_w = t_r;
+		count_w = count_r + 1;
 		if (count_r==255) begin
-			finish = 1;	
 			state_w = S_IDLE;
-			t_mont_start = 0;
-			m_mont_start = 0;
+			finish = 1;
+			t_mont_start_w = 0;
+			m_mont_start_w = 0;
 		
 		end else begin
-			finish = 0;
 			state_w = S_MONT;
-			t_mont_start = 1;
-			m_mont_start = 1;
+			finish = 0;
+			t_mont_start_w = 1;
+			m_mont_start_w = 1;
 		end	
 	end
 	endcase
@@ -147,17 +150,25 @@ end
 
 always_ff @(posedge i_clk or posedge i_rst) begin
 	if (i_rst) begin
+		state_r <= S_IDLE;
 		o_finished <= 0;
+		prep_start <= 0;
+		t_mont_start <= 0;
+		m_mont_start <= 0;
+		y_r <= 0;
 		m_r <= 0;
 		t_r <= 0;
-		state_r <= S_IDLE;
 		count_r <= 0;
 	end
 	else begin
+		state_r <= state_w;
 		o_finished <= finish;
+		prep_start <= prep_start_w;
+		t_mont_start <= t_mont_start_w;
+		m_mont_start <= m_mont_start_w;
+		y_r <= y_w;
 		m_r <= m_w;
 		t_r <= t_w;
-		state_r <= state_w;
 		count_r <= count_w;
 	end
 
