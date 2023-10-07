@@ -269,9 +269,8 @@ module RsaMont (
 	input  [255:0] i_b, // cipher text y
 	input  [255:0] i_n,
 	output reg [255:0] o_m, // t = y * 2^256
-	output  reg       o_finished
+	output reg       o_finished
 );
-
 
 localparam S_IDLE = 0;
 localparam S_CALC = 1;
@@ -279,10 +278,9 @@ localparam S_CALC = 1;
 logic state_r, state_w;
 logic [7:0]   count_r, count_w;
 logic [255:0] n_r, n_w;
-logic [255:0] m_r, m_w, m_final;
+logic [255:0] m_w, m_final;
+logic [256:0] m_added_w, m_evened_w;
 logic finished_w;
-
-assign o_m = m_r;
 
 always_comb begin
 	case(state_r)
@@ -296,8 +294,8 @@ always_comb begin
 			n_w        = i_n;
 		end
 		else begin
-			m_w        = m_r;
-			m_final    = m_r;
+			m_w        = o_m;
+			m_final    = o_m;
             finished_w = o_finished;
 			state_w    = state_r;
 			count_w    = count_r;
@@ -305,21 +303,11 @@ always_comb begin
 		end
 	end
 	S_CALC: begin
-		count_w = count_r + 1;
-		n_w = n_r;
-		if (i_a[count_r]) begin
-			if (m_r[0] ^ i_b[0]) begin
-				m_w = (m_r + i_b + n_r) >> 1;
-			end else begin
-				m_w = (m_r + i_b) >> 1;
-			end
-		end else begin
-			if (m_r[0]) begin
-				m_w = (m_r + n_r) >> 1;
-			end else begin
-				m_w = m_r >> 1;
-			end
-		end
+		count_w    = count_r + 1;
+		n_w        = n_r;
+		m_added_w  = (i_a[count_r]) ? o_m + i_b : o_m;
+		m_evened_w = (m_added_w[0]) ? ((m_added_w >= n_r) ? m_added_w - n_r: m_added_w + n_r) : m_added_w;
+		m_w        = m_evened_w >> 1;
 
 		if (count_r == 255) begin
 			state_w = S_IDLE;
@@ -332,34 +320,29 @@ always_comb begin
 		end
 		else begin
 			state_w = S_CALC;
-			m_final = m_w;
 			finished_w = 0;
+			m_final = m_w;
 		end
 	end
 	endcase
 end
 
-
-
 always_ff @(posedge i_clk or posedge i_rst) begin
 	if (i_rst) begin
-        m_r        <= 0;
+        o_m        <= 0;
 		o_finished <= 0;
 		state_r    <= S_IDLE;
         count_r    <= 0;
 		n_r        <= 0;
 	end
 	else begin
-		m_r        <= m_final;
+		o_m        <= m_final;
 		o_finished <= finished_w;
 		state_r    <= state_w;
         count_r    <= count_w;
 		n_r        <= n_w;
 
 	end
-
 end
-
-
 
 endmodule
