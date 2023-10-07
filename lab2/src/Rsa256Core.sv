@@ -194,7 +194,7 @@ logic [255:0] t_w;
 always_comb begin
 	count_w = count_r + 1;
 	if (o_t[255] || (o_t << 1) >= n_r) begin
-		t_w = o_t << 1 - n_r;
+		t_w = (o_t << 1) - n_r;
 	end	else begin
 		t_w = o_t << 1;
 	end
