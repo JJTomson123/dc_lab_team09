@@ -197,58 +197,61 @@ module RsaPrep (
 localparam S_IDLE = 0;
 localparam S_CALC = 1;
 
-logic state;
+logic state_r, state_w, finished_w;
 logic [7:0]   count_r, count_w;
-logic [255:0] n_r;
-logic [255:0] t_w;
+logic [255:0] n_r, n_w, t_w;
 
 always_comb begin
-	count_w = count_r + 1;
-	if (o_t[255] || (o_t << 1) >= n_r) begin
-		t_w = (o_t << 1) - n_r;
-	end	else begin
-		t_w = o_t << 1;
+	case (state_r)
+	S_IDLE: begin
+		count_w = 0;
+		if (i_start) begin
+			t_w        = i_b;
+			finished_w = 0;
+			state_w    = S_CALC;
+			n_w        = i_n;
+		end else begin
+			t_w        = o_t;
+			finished_w = o_finished;
+			state_w    = S_IDLE;
+			n_w        = 0;
+		end
 	end
+	S_CALC: begin
+		n_w = n_r;
+		count_w = count_r + 1;
+
+		if (o_t[255] || (o_t << 1) >= n_r) begin
+			t_w = (o_t << 1) - n_r;
+		end	else begin
+			t_w = o_t << 1;
+		end
+
+		if (count_r == 255) begin
+			finished_w = 1;
+			state_w    = S_IDLE;
+		end else begin
+			finished_w = 0;
+			state_w    = S_CALC;
+		end
+	end
+	endcase
+	
 end
 
 always_ff @(posedge i_clk or posedge i_rst) begin
 	if (i_rst) begin
         o_t        <= 0;
 		o_finished <= 0;
-		state      <= S_IDLE;
+		state_r    <= S_IDLE;
         count_r    <= 0;
-		n_r          <= 0;
+		n_r        <= 0;
     end else begin
-        case (state)
-		S_IDLE: begin
-			if (i_start) begin
-				o_t        <= i_b;
-				o_finished <= 0;
-				state      <= S_CALC;
-				count_r    <= 0;
-				n_r        <= i_n;
-			end else begin
-				o_t        <= o_t;
-				o_finished <= o_finished;
-				state      <= state;
-				count_r    <= count_r;
-				n_r        <= n_r;
-			end
-		end
-		S_CALC: begin
-			o_t <= t_w;
-			n_r   <= n_r;
-			if (count_w == 0) begin
-				o_finished <= 1;
-				state      <= S_IDLE;
-				count_r    <= 0;
-			end else begin
-				o_finished <= 0;
-				state      <= S_CALC;
-				count_r    <= count_w;
-			end
-		end
-		endcase
+		o_t        <= t_w;
+		o_finished <= finished_w;
+		state_r    <= state_w;
+		count_r    <= count_w;
+		n_r        <= n_w;
     end
 end
 
@@ -277,50 +280,50 @@ localparam S_CALC = 1;
 logic state_r, state_w;
 logic [7:0]   count_r, count_w;
 logic [255:0] n_r, n_w;
-logic [255:0] m_w, m_final;
+logic [255:0] m_shifted_w, m_w;
 logic [256:0] m_added_w, m_evened_w;
 logic finished_w;
 
 always_comb begin
 	case(state_r)
 	S_IDLE: begin
+		m_added_w   = 0;
+		m_evened_w  = 0;
+		m_shifted_w = 0;
+		count_w     = 0;
 		if (i_start) begin
 			m_w        = 0;
-			m_final    = 0;
             finished_w = 0;
 			state_w    = S_CALC;
-			count_w    = 0;
 			n_w        = i_n;
 		end
 		else begin
 			m_w        = o_m;
-			m_final    = o_m;
             finished_w = o_finished;
-			state_w    = state_r;
-			count_w    = count_r;
-			n_w        = n_r;
+			state_w    = S_IDLE;
+			n_w        = 0;
 		end
 	end
 	S_CALC: begin
-		count_w    = count_r + 1;
-		n_w        = n_r;
-		m_added_w  = (i_a[count_r]) ? o_m + i_b : o_m;
-		m_evened_w = (m_added_w[0]) ? ((m_added_w >= n_r) ? m_added_w - n_r: m_added_w + n_r) : m_added_w;
-		m_w        = m_evened_w >> 1;
+		count_w     = count_r + 1;
+		n_w         = n_r;
+		m_added_w   = (i_a[count_r]) ? o_m + i_b : o_m;
+		m_evened_w  = (m_added_w[0]) ? ((m_added_w >= n_r) ? m_added_w - n_r: m_added_w + n_r) : m_added_w;
+		m_shifted_w = m_evened_w >> 1;
 
 		if (count_r == 255) begin
 			state_w = S_IDLE;
 			finished_w = 1;
-			if (m_w >= n_r) begin
-				m_final = m_w - n_r;
+			if (m_shifted_w >= n_r) begin
+				m_w = m_shifted_w - n_r;
 			end else begin
-				m_final = m_w;
+				m_w = m_shifted_w;
 			end
 		end
 		else begin
 			state_w = S_CALC;
 			finished_w = 0;
-			m_final = m_w;
+			m_w = m_shifted_w;
 		end
 	end
 	endcase
@@ -335,7 +338,7 @@ always_ff @(posedge i_clk or posedge i_rst) begin
 		n_r        <= 0;
 	end
 	else begin
-		o_m        <= m_final;
+		o_m        <= m_w;
 		o_finished <= finished_w;
 		state_r    <= state_w;
         count_r    <= count_w;
