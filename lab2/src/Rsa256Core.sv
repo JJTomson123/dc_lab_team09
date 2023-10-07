@@ -87,7 +87,7 @@ always_comb begin
 		y_w = y_r;
 		finish = 0;
 		count_w = count_r;
-		if (prep_finished) begin
+		if (prep_finished && !prep_start) begin
 			state_w = S_MONT;
             t_mont_start_w = 1;
 			m_mont_start_w = 1;
@@ -110,7 +110,7 @@ always_comb begin
 		y_w = y_r;
 		finish = 0;
 		count_w = count_r;
-		if (m_mont_finished && t_mont_finished) begin
+		if ((m_mont_finished && !m_mont_start) && (t_mont_finished && !t_mont_start)) begin
 			if (i_d[count_r]) begin
 				state_w = S_CALC;
 				m_w = m_mont;
@@ -250,7 +250,6 @@ always_ff @(posedge i_clk or posedge i_rst) begin
 		end
 		endcase
     end
-
 end
 
 endmodule
@@ -341,7 +340,6 @@ always_ff @(posedge i_clk or posedge i_rst) begin
 		state_r    <= state_w;
         count_r    <= count_w;
 		n_r        <= n_w;
-
 	end
 end
 
