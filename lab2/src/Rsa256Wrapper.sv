@@ -66,6 +66,17 @@ endtask
 
 always_comb begin
     // TODO
+    case(state_r)
+    S_GET_KEY: begin
+    end
+    S_GET_DATA: begin
+    end
+    S_WAIT_CALCULATE: begin
+    end
+    S_SEND_DATA: begin
+    end
+
+    endcase
 end
 
 always_ff @(posedge avm_clk or posedge avm_rst) begin
