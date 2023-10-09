@@ -16,13 +16,15 @@ localparam TX_OK_BIT   = 6;
 localparam RX_OK_BIT   = 7;
 
 // Feel free to design your own FSM!
-localparam S_GET_KEY = 0;
-localparam S_GET_DATA = 1;
-localparam S_WAIT_CALCULATE = 2;
-localparam S_SEND_DATA = 3;
+localparam S_QUERY_RX = 0;
+localparam S_GET_KEY = 1;
+localparam S_GET_DATA = 2;
+localparam S_WAIT_CALCULATE = 3;
+localparam S_QUERY_TX = 4;
+localparam S_SEND_DATA = 5;
 
 logic [255:0] n_r, n_w, d_r, d_w, enc_r, enc_w, dec_r, dec_w;
-logic [1:0] state_r, state_w;
+logic [2:0] state_r, state_w, state_save_r, state_save_w;
 logic [6:0] bytes_counter_r, bytes_counter_w;
 logic [4:0] avm_address_r, avm_address_w;
 logic avm_read_r, avm_read_w, avm_write_r, avm_write_w;
@@ -66,16 +68,109 @@ endtask
 
 always_comb begin
     // TODO
+    state_save_w = state_save_r;
+    {n_w, d_w, enc_w} = {n_r, d_r, enc_r};
+    dec_w = dec_r;
+    avm_address_w = STATUS_BASE;
+    avm_read_w = 0;
+    avm_write_w = 0;
+    bytes_counter_w = 0;
+    rsa_start_w = 0;
     case(state_r)
+    S_QUERY_RX: begin
+        bytes_counter_w = bytes_counter_r;
+        if (avm_waitrequest) begin
+            state_w = S_QUERY_RX;
+            StartRead(STATUS_BASE);
+        end else if (avm_readdata[7]) begin
+            state_w = state_save_r;
+            StartRead(RX_BASE);
+        end else begin
+            state_w = S_QUERY_RX;
+            StartRead(STATUS_BASE);
+        end
+    end
     S_GET_KEY: begin
+        if (avm_waitrequest) begin
+            state_w = S_GET_KEY;
+            StartRead(RX_BASE);
+            bytes_counter_w = bytes_counter_r;
+        end else begin
+            {n_w, d_w} = ({n_r, d_r} << 8) | avm_readdata;
+            if (bytes_counter_r == 63) begin
+            /* {n_w, d_w, enc_w} = ({n_r, d_r, enc_r} << 8) | avm_readdata;
+            if (bytes_counter_r == 95) begin */
+                state_w = S_QUERY_RX;
+                state_save_w = S_GET_DATA;
+                bytes_counter_w = 0;
+            end else begin
+                state_w = S_QUERY_RX;
+                bytes_counter_w = bytes_counter_r + 1;
+            end
+        end
     end
     S_GET_DATA: begin
+        if (avm_waitrequest) begin
+            state_w = S_GET_DATA;
+            StartRead(RX_BASE);
+            bytes_counter_w = bytes_counter_r;
+        end else begin
+            enc_w = (enc_r << 8) | avm_readdata;
+            if (bytes_counter_r == 31) begin
+                state_w = S_WAIT_CALCULATE;
+                rsa_start_w = 1;
+                bytes_counter_w = 0;
+            end else begin
+                state_w = S_QUERY_RX;
+                bytes_counter_w = bytes_counter_r + 1;
+            end
+        end
     end
     S_WAIT_CALCULATE: begin
+        if (rsa_finished && !rsa_start_r) begin
+            state_w = S_QUERY_TX;
+            dec_w = rsa_dec;
+        end else begin
+            state_w = S_WAIT_CALCULATE;
+        end
+    end
+    S_QUERY_TX: begin
+        bytes_counter_w = bytes_counter_r;
+        if (avm_waitrequest) begin
+            state_w = S_QUERY_TX;
+            StartRead(STATUS_BASE);
+        end else if (avm_readdata[6]) begin
+            state_w = S_SEND_DATA;
+            StartWrite(TX_BASE);
+        end else begin
+            state_w = S_QUERY_TX;
+            StartRead(STATUS_BASE);
+        end
+        /* if (!avm_waitrequest && avm_readdata[6]) begin
+            state_w = S_SEND_DATA;
+            StartWrite(TX_BASE);
+            dec_w = dec_r << 8;
+        end else begin
+            state_w = S_QUERY_TX;
+        end */
     end
     S_SEND_DATA: begin
+        if (avm_waitrequest) begin
+            state_w = S_SEND_DATA;
+            StartWrite(TX_BASE);
+            bytes_counter_w = bytes_counter_r;
+        end else begin
+            if (bytes_counter_r == 30) begin
+                state_w = S_QUERY_RX;
+                bytes_counter_w = 0;
+                enc_w = 0;
+            end else begin
+                state_w = S_QUERY_TX;
+                dec_w = dec_r << 8;
+                bytes_counter_w = bytes_counter_r + 1;
+            end
+        end
     end
-
     endcase
 end
 
@@ -86,10 +181,11 @@ always_ff @(posedge avm_clk or posedge avm_rst) begin
         enc_r <= 0;
         dec_r <= 0;
         avm_address_r <= STATUS_BASE;
-        avm_read_r <= 1;
+        avm_read_r <= 0;
         avm_write_r <= 0;
-        state_r <= S_GET_KEY;
-        bytes_counter_r <= 63;
+        state_r <= S_QUERY_RX;
+        state_save_r <= S_GET_KEY;
+        bytes_counter_r <= 0;
         rsa_start_r <= 0;
     end else begin
         n_r <= n_w;
@@ -100,6 +196,7 @@ always_ff @(posedge avm_clk or posedge avm_rst) begin
         avm_read_r <= avm_read_w;
         avm_write_r <= avm_write_w;
         state_r <= state_w;
+        state_save_r <= state_save_w;
         bytes_counter_r <= bytes_counter_w;
         rsa_start_r <= rsa_start_w;
     end
