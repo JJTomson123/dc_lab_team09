@@ -176,8 +176,8 @@ module RsaPrep (
     output             o_rdy
 );
 
-localparam S_IDLE = 0;
-localparam S_CALC = 1;
+localparam S_IDLE = 1'b0;
+localparam S_CALC = 1'b1;
 
 logic         state_r, state_w;
 logic [7:0]   count_r, count_w;
@@ -239,14 +239,14 @@ module RsaMont (
     output             o_rdy
 );
 
-localparam S_IDLE = 0;
-localparam S_CALC = 1;
+localparam S_IDLE = 2'b00;
+localparam S_CALC = 2'b01;
+localparam S_UPDT = 2'b10;
 
-logic         state_r, state_w;
+logic [1:0]   state_r, state_w;
 logic [7:0]   count_r, count_w;
 logic [255:0] n_r, n_w;
-logic [255:0] m_shifted_w, m_w;
-logic [256:0] m_added_w, m_evened_w;
+logic [255:0] m_w;
 
 assign o_rdy = (state_r == S_IDLE);
 
@@ -254,9 +254,6 @@ always_comb begin
     case(state_r)
     S_IDLE: begin
         count_w     = 0;
-        m_added_w   = 0;
-        m_evened_w  = 0;
-        m_shifted_w = 0;
         if (i_start) begin
             state_w    = S_CALC;
             n_w        = i_n;
@@ -268,18 +265,28 @@ always_comb begin
         end
     end
     S_CALC: begin
-        count_w     = count_r + 1;
-        n_w         = n_r;
-        m_added_w   = (i_a[count_r]) ? o_m + i_b : o_m;
-        m_evened_w  = (m_added_w[0]) ? ((m_added_w >= n_r) ? m_added_w - n_r: m_added_w + n_r) : m_added_w;
-        m_shifted_w = m_evened_w >> 1;
+        n_w = n_r;
+        case ({i_a[count_r], o_m[0], i_b[0], o_m > -i_b})
+        4'b0000, 4'b0001, 4'b0010, 4'b0011: m_w = {1'b0, o_m[255:1]};
+        4'b0100, 4'b0101, 4'b0110, 4'b0111: m_w = ({1'b0, o_m} + n_r) >> 1;
+        4'b1000, 4'b1001, 4'b1110, 4'b1111: m_w = ({1'b0, o_m} + i_b) >> 1;
+        4'b1100, 4'b1010: m_w = ({1'b0, o_m} + i_b + n_r) >> 1;
+        4'b1101, 4'b1011: m_w = ({1'b0, o_m} + i_b - n_r) >> 1;
+        endcase
         if (count_r == 255) begin
-            state_w = S_IDLE;
-            m_w     = (m_shifted_w >= n_r) ? m_shifted_w - n_r : m_shifted_w;
+            state_w = S_UPDT;
+            count_w = 0;
         end else begin
             state_w = S_CALC;
-            m_w     = m_shifted_w;
+            count_w = count_r + 1;
         end
+    end
+    S_UPDT: begin
+        state_w = S_IDLE;
+        count_w = 0;
+        n_w     = 0;
+        if (o_m >= n_r) m_w = o_m - n_r;
+        else            m_w = o_m;
     end
     endcase
 end
