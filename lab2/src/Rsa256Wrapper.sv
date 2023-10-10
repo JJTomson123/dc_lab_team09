@@ -17,12 +17,12 @@ localparam RX_OK_BIT   = 7;
 
 // Feel free to design your own FSM!
 localparam S_QUERY_RX = 0;
-localparam S_GET_KEY = 1;
 localparam S_GET_DATA = 2;
 localparam S_WAIT_CALCULATE = 3;
 localparam S_QUERY_TX = 4;
 localparam S_SEND_DATA = 5;
 
+logic [255:0] instr_r, instr_w;
 logic [255:0] n_r, n_w, d_r, d_w, enc_r, enc_w, dec_r, dec_w;
 logic [2:0] state_r, state_w, state_save_r, state_save_w;
 logic [6:0] bytes_counter_r, bytes_counter_w;
@@ -68,8 +68,8 @@ endtask
 
 always_comb begin
     // TODO
-    state_save_w = state_save_r;
     {n_w, d_w, enc_w} = {n_r, d_r, enc_r};
+    instr_w = instr_r;
     dec_w = dec_r;
     avm_address_w = STATUS_BASE;
     avm_read_w = 0;
@@ -83,14 +83,14 @@ always_comb begin
             state_w = S_QUERY_RX;
             StartRead(STATUS_BASE);
         end else if (avm_readdata[7]) begin
-            state_w = state_save_r;
+            state_w = S_GET_DATA;
             StartRead(RX_BASE);
         end else begin
             state_w = S_QUERY_RX;
             StartRead(STATUS_BASE);
         end
     end
-    S_GET_KEY: begin
+    /* S_GET_KEY: begin
         if (avm_waitrequest) begin
             state_w = S_GET_KEY;
             StartRead(RX_BASE);
@@ -98,8 +98,6 @@ always_comb begin
         end else begin
             {n_w, d_w} = ({n_r, d_r} << 8) | avm_readdata;
             if (bytes_counter_r == 63) begin
-            /* {n_w, d_w, enc_w} = ({n_r, d_r, enc_r} << 8) | avm_readdata;
-            if (bytes_counter_r == 95) begin */
                 state_w = S_QUERY_RX;
                 state_save_w = S_GET_DATA;
                 bytes_counter_w = 0;
@@ -108,21 +106,40 @@ always_comb begin
                 bytes_counter_w = bytes_counter_r + 1;
             end
         end
-    end
+    end */
     S_GET_DATA: begin
         if (avm_waitrequest) begin
             state_w = S_GET_DATA;
             StartRead(RX_BASE);
             bytes_counter_w = bytes_counter_r;
         end else begin
-            enc_w = (enc_r << 8) | avm_readdata;
-            if (bytes_counter_r == 31) begin
-                state_w = S_WAIT_CALCULATE;
-                rsa_start_w = 1;
+            if (bytes_counter_r == 32) begin
+                instr_w = 0;
+                case (avm_readdata[1:0])
+                2'b00: begin
+                    state_w = S_QUERY_RX;
+                    n_w     = instr_r;
+                end
+                2'b01: begin
+                    state_w = S_QUERY_RX;
+                    d_w     = instr_r;
+                end
+                2'b10: begin
+                    state_w     = S_WAIT_CALCULATE;
+                    enc_w       = instr_r;
+                    rsa_start_w = 1;
+                end
+                default begin
+                    state_w = S_QUERY_RX;
+                end
+                endcase
+                /* state_w = S_WAIT_CALCULATE;
+                rsa_start_w = 1; */
                 bytes_counter_w = 0;
             end else begin
                 state_w = S_QUERY_RX;
                 bytes_counter_w = bytes_counter_r + 1;
+                instr_w = {instr_r[247:0], avm_readdata[7:0]};
             end
         end
     end
@@ -176,6 +193,7 @@ end
 
 always_ff @(posedge avm_clk or posedge avm_rst) begin
     if (avm_rst) begin
+        instr_r <= 0;
         n_r <= 0;
         d_r <= 0;
         enc_r <= 0;
@@ -184,10 +202,10 @@ always_ff @(posedge avm_clk or posedge avm_rst) begin
         avm_read_r <= 0;
         avm_write_r <= 0;
         state_r <= S_QUERY_RX;
-        state_save_r <= S_GET_KEY;
         bytes_counter_r <= 0;
         rsa_start_r <= 0;
     end else begin
+        instr_r <= instr_w;
         n_r <= n_w;
         d_r <= d_w;
         enc_r <= enc_w;
@@ -196,7 +214,6 @@ always_ff @(posedge avm_clk or posedge avm_rst) begin
         avm_read_r <= avm_read_w;
         avm_write_r <= avm_write_w;
         state_r <= state_w;
-        state_save_r <= state_save_w;
         bytes_counter_r <= bytes_counter_w;
         rsa_start_r <= rsa_start_w;
     end
