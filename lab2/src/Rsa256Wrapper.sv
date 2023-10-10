@@ -67,7 +67,6 @@ task StartWrite;
 endtask
 
 always_comb begin
-    // TODO
     {n_w, d_w, enc_w} = {n_r, d_r, enc_r};
     instr_w = instr_r;
     dec_w = dec_r;
@@ -79,42 +78,23 @@ always_comb begin
     case(state_r)
     S_QUERY_RX: begin
         bytes_counter_w = bytes_counter_r;
-        if (avm_waitrequest) begin
+        if (avm_waitrequest || !avm_readdata[7]) begin
             state_w = S_QUERY_RX;
             StartRead(STATUS_BASE);
-        end else if (avm_readdata[7]) begin
+        end else begin
             state_w = S_GET_DATA;
             StartRead(RX_BASE);
-        end else begin
-            state_w = S_QUERY_RX;
-            StartRead(STATUS_BASE);
         end
     end
-    /* S_GET_KEY: begin
-        if (avm_waitrequest) begin
-            state_w = S_GET_KEY;
-            StartRead(RX_BASE);
-            bytes_counter_w = bytes_counter_r;
-        end else begin
-            {n_w, d_w} = ({n_r, d_r} << 8) | avm_readdata;
-            if (bytes_counter_r == 63) begin
-                state_w = S_QUERY_RX;
-                state_save_w = S_GET_DATA;
-                bytes_counter_w = 0;
-            end else begin
-                state_w = S_QUERY_RX;
-                bytes_counter_w = bytes_counter_r + 1;
-            end
-        end
-    end */
     S_GET_DATA: begin
         if (avm_waitrequest) begin
-            state_w = S_GET_DATA;
-            StartRead(RX_BASE);
+            state_w         = S_GET_DATA;
             bytes_counter_w = bytes_counter_r;
+            StartRead(RX_BASE);
         end else begin
             if (bytes_counter_r == 32) begin
-                instr_w = 0;
+                bytes_counter_w = 0;
+                instr_w         = 0;
                 case (avm_readdata[1:0])
                 2'b00: begin
                     state_w = S_QUERY_RX;
@@ -133,58 +113,45 @@ always_comb begin
                     state_w = S_QUERY_RX;
                 end
                 endcase
-                /* state_w = S_WAIT_CALCULATE;
-                rsa_start_w = 1; */
-                bytes_counter_w = 0;
             end else begin
-                state_w = S_QUERY_RX;
+                state_w         = S_QUERY_RX;
                 bytes_counter_w = bytes_counter_r + 1;
-                instr_w = {instr_r[247:0], avm_readdata[7:0]};
+                instr_w         = {instr_r[247:0], avm_readdata[7:0]};
             end
         end
     end
     S_WAIT_CALCULATE: begin
         if (rsa_finished && !rsa_start_r) begin
             state_w = S_QUERY_TX;
-            dec_w = rsa_dec;
+            dec_w   = rsa_dec;
         end else begin
             state_w = S_WAIT_CALCULATE;
         end
     end
     S_QUERY_TX: begin
         bytes_counter_w = bytes_counter_r;
-        if (avm_waitrequest) begin
+        if (avm_waitrequest || !avm_readdata[6]) begin
             state_w = S_QUERY_TX;
             StartRead(STATUS_BASE);
-        end else if (avm_readdata[6]) begin
+        end else begin
             state_w = S_SEND_DATA;
             StartWrite(TX_BASE);
-        end else begin
-            state_w = S_QUERY_TX;
-            StartRead(STATUS_BASE);
         end
-        /* if (!avm_waitrequest && avm_readdata[6]) begin
-            state_w = S_SEND_DATA;
-            StartWrite(TX_BASE);
-            dec_w = dec_r << 8;
-        end else begin
-            state_w = S_QUERY_TX;
-        end */
     end
     S_SEND_DATA: begin
         if (avm_waitrequest) begin
             state_w = S_SEND_DATA;
-            StartWrite(TX_BASE);
             bytes_counter_w = bytes_counter_r;
+            StartWrite(TX_BASE);
         end else begin
             if (bytes_counter_r == 30) begin
-                state_w = S_QUERY_RX;
+                state_w         = S_QUERY_RX;
                 bytes_counter_w = 0;
-                enc_w = 0;
+                enc_w           = 0;
             end else begin
-                state_w = S_QUERY_TX;
-                dec_w = dec_r << 8;
+                state_w         = S_QUERY_TX;
                 bytes_counter_w = bytes_counter_r + 1;
+                dec_w           = dec_r << 8;
             end
         end
     end
