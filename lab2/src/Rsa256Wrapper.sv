@@ -67,7 +67,6 @@ task StartWrite;
 endtask
 
 always_comb begin
-    // TODO
     state_save_w = state_save_r;
     {n_w, d_w, enc_w} = {n_r, d_r, enc_r};
     dec_w = dec_r;
@@ -79,15 +78,12 @@ always_comb begin
     case(state_r)
     S_QUERY_RX: begin
         bytes_counter_w = bytes_counter_r;
-        if (avm_waitrequest) begin
+        if (avm_waitrequest || !avm_readdata[7]) begin
             state_w = S_QUERY_RX;
             StartRead(STATUS_BASE);
-        end else if (avm_readdata[7]) begin
+        end else begin
             state_w = state_save_r;
             StartRead(RX_BASE);
-        end else begin
-            state_w = S_QUERY_RX;
-            StartRead(STATUS_BASE);
         end
     end
     S_GET_KEY: begin
@@ -96,10 +92,8 @@ always_comb begin
             StartRead(RX_BASE);
             bytes_counter_w = bytes_counter_r;
         end else begin
-            {n_w, d_w} = ({n_r, d_r} << 8) | avm_readdata;
+            {n_w, d_w} = {n_r[247:0], d_r, avm_readdata[7:0]};
             if (bytes_counter_r == 63) begin
-            /* {n_w, d_w, enc_w} = ({n_r, d_r, enc_r} << 8) | avm_readdata;
-            if (bytes_counter_r == 95) begin */
                 state_w = S_QUERY_RX;
                 state_save_w = S_GET_DATA;
                 bytes_counter_w = 0;
@@ -115,7 +109,7 @@ always_comb begin
             StartRead(RX_BASE);
             bytes_counter_w = bytes_counter_r;
         end else begin
-            enc_w = (enc_r << 8) | avm_readdata;
+            enc_w = {enc_r[247:0], avm_readdata[7:0]};
             if (bytes_counter_r == 31) begin
                 state_w = S_WAIT_CALCULATE;
                 rsa_start_w = 1;
@@ -136,23 +130,13 @@ always_comb begin
     end
     S_QUERY_TX: begin
         bytes_counter_w = bytes_counter_r;
-        if (avm_waitrequest) begin
+        if (avm_waitrequest || !avm_readdata[6]) begin
             state_w = S_QUERY_TX;
             StartRead(STATUS_BASE);
-        end else if (avm_readdata[6]) begin
+        end else begin
             state_w = S_SEND_DATA;
             StartWrite(TX_BASE);
-        end else begin
-            state_w = S_QUERY_TX;
-            StartRead(STATUS_BASE);
         end
-        /* if (!avm_waitrequest && avm_readdata[6]) begin
-            state_w = S_SEND_DATA;
-            StartWrite(TX_BASE);
-            dec_w = dec_r << 8;
-        end else begin
-            state_w = S_QUERY_TX;
-        end */
     end
     S_SEND_DATA: begin
         if (avm_waitrequest) begin
