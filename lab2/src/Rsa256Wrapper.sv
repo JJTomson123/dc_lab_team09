@@ -67,18 +67,18 @@ task StartWrite;
 endtask
 
 always_comb begin
-    {n_w, d_w, enc_w} = {n_r, d_r, enc_r};
-    instr_w = instr_r;
-    dec_w = dec_r;
-    avm_address_w = STATUS_BASE;
-    avm_read_w = 0;
+    {n_w, d_w, enc_w} = {n_r, d_r, enc_r}; // Preserve keys and cipher
+    instr_w = instr_r; // Preserve get data
+    dec_w = dec_r;  // Preserve message
+    avm_address_w = STATUS_BASE; // Read at STATUS_BASE by default
+    avm_read_w = 0; // No r/w by default
     avm_write_w = 0;
     bytes_counter_w = 0;
     rsa_start_w = 0;
     case(state_r)
-    S_QUERY_RX: begin
-        bytes_counter_w = bytes_counter_r;
-        if (avm_waitrequest || !avm_readdata[7]) begin
+    S_QUERY_RX: begin // Query whether there is data available to receive
+        bytes_counter_w = bytes_counter_r; // DO NOT reset count of bytes received
+        if (avm_waitrequest || !avm_readdata[7]) begin // Data unavailable
             state_w = S_QUERY_RX;
             StartRead(STATUS_BASE);
         end else begin
@@ -86,16 +86,16 @@ always_comb begin
             StartRead(RX_BASE);
         end
     end
-    S_GET_DATA: begin
-        if (avm_waitrequest) begin
-            state_w         = S_GET_DATA;
-            bytes_counter_w = bytes_counter_r;
+    S_GET_DATA: begin // Save get data
+        if (avm_waitrequest) begin // Data unavailable
+            state_w         = S_GET_DATA; // Wait
+            bytes_counter_w = bytes_counter_r; // DO NOT reset count of bytes received
             StartRead(RX_BASE);
         end else begin
-            if (bytes_counter_r == 32) begin
+            if (bytes_counter_r == 32) begin // All 32 bytes received
                 bytes_counter_w = 0;
                 instr_w         = 0;
-                case (avm_readdata[1:0])
+                case (avm_readdata[1:0]) // Switch cases on 33rd byte
                 2'b00: begin
                     state_w = S_QUERY_RX;
                     n_w     = instr_r;
@@ -104,7 +104,7 @@ always_comb begin
                     state_w = S_QUERY_RX;
                     d_w     = instr_r;
                 end
-                2'b10: begin
+                2'b10: begin // Start RsaCore
                     state_w     = S_WAIT_CALCULATE;
                     enc_w       = instr_r;
                     rsa_start_w = 1;
@@ -113,35 +113,35 @@ always_comb begin
                     state_w = S_QUERY_RX;
                 end
                 endcase
-            end else begin
+            end else begin // Not enough bytes yet
                 state_w         = S_QUERY_RX;
-                bytes_counter_w = bytes_counter_r + 1;
-                instr_w         = {instr_r[247:0], avm_readdata[7:0]};
+                bytes_counter_w = bytes_counter_r + 1; // Increment byte counter
+                instr_w         = {instr_r[247:0], avm_readdata[7:0]}; // Shift byte into data
             end
         end
     end
     S_WAIT_CALCULATE: begin
         if (rsa_finished && !rsa_start_r) begin
             state_w = S_QUERY_TX;
-            dec_w   = rsa_dec;
+            dec_w   = rsa_dec; // Save message
         end else begin
             state_w = S_WAIT_CALCULATE;
         end
     end
-    S_QUERY_TX: begin
-        bytes_counter_w = bytes_counter_r;
-        if (avm_waitrequest || !avm_readdata[6]) begin
+    S_QUERY_TX: begin // Query whether the line is available to write to
+        bytes_counter_w = bytes_counter_r; // DO NOT reset count of bytes sent
+        if (avm_waitrequest || !avm_readdata[6]) begin // Line unavailable to write to
             state_w = S_QUERY_TX;
             StartRead(STATUS_BASE);
         end else begin
-            state_w = S_SEND_DATA;
+            state_w = S_SEND_DATA; // Goto send data
             StartWrite(TX_BASE);
         end
     end
     S_SEND_DATA: begin
-        if (avm_waitrequest) begin
+        if (avm_waitrequest) begin // Line unavailable
             state_w = S_SEND_DATA;
-            bytes_counter_w = bytes_counter_r;
+            bytes_counter_w = bytes_counter_r; // DO NOT reset count of bytes sent
             StartWrite(TX_BASE);
         end else begin
             if (bytes_counter_r == 30) begin
@@ -151,7 +151,7 @@ always_comb begin
             end else begin
                 state_w         = S_QUERY_TX;
                 bytes_counter_w = bytes_counter_r + 1;
-                dec_w           = dec_r << 8;
+                dec_w           = dec_r << 8; // Shift message by one byte
             end
         end
     end

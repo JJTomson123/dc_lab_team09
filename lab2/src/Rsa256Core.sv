@@ -203,7 +203,7 @@ always_comb begin
         state_w = (count_r == 255) ? S_IDLE : S_CALC;
         count_w = count_r + 1;
         n_w     = n_r;
-        t_w     = (o_t[255] || (o_t << 1) >= n_r) ? (o_t << 1) - n_r : o_t << 1;
+        t_w     = (o_t[255] || (o_t << 1) >= n_r) ? (o_t << 1) - n_r : o_t << 1; // Is 2*t >= n?
     end
     endcase
 end
@@ -267,11 +267,11 @@ always_comb begin
     S_CALC: begin
         n_w = n_r;
         case ({i_a[count_r], o_m[0], i_b[0], o_m > -i_b})
-        4'b0000, 4'b0001, 4'b0010, 4'b0011: m_w = {1'b0, o_m[255:1]};
-        4'b0100, 4'b0101, 4'b0110, 4'b0111: m_w = ({1'b0, o_m} + n_r) >> 1;
-        4'b1000, 4'b1001, 4'b1110, 4'b1111: m_w = ({1'b0, o_m} + i_b) >> 1;
-        4'b1100, 4'b1010: m_w = ({1'b0, o_m} + i_b + n_r) >> 1;
-        4'b1101, 4'b1011: m_w = ({1'b0, o_m} + i_b - n_r) >> 1;
+        4'b0000, 4'b0001, 4'b0010, 4'b0011: m_w = {1'b0, o_m[255:1]}; // a[i] = 0, m even
+        4'b0100, 4'b0101, 4'b0110, 4'b0111: m_w = ({1'b0, o_m} + n_r) >> 1; // a[i] = 0, m odd
+        4'b1000, 4'b1001, 4'b1110, 4'b1111: m_w = ({1'b0, o_m} + i_b) >> 1; // a[i] = 1, m + b even
+        4'b1100, 4'b1010: m_w = ({1'b0, o_m} + i_b + n_r) >> 1; // a[i] = 1, m + b odd and < 2^256
+        4'b1101, 4'b1011: m_w = ({1'b0, o_m} + i_b - n_r) >> 1; // a[i] = 1, m + b odd and >= 2^256
         endcase
         if (count_r == 255) begin
             state_w = S_UPDT;
