@@ -17,12 +17,12 @@ localparam RX_OK_BIT   = 7;
 
 // Feel free to design your own FSM!
 localparam S_QUERY_RX = 0;
-localparam S_GET_KEY = 1;
 localparam S_GET_DATA = 2;
 localparam S_WAIT_CALCULATE = 3;
 localparam S_QUERY_TX = 4;
 localparam S_SEND_DATA = 5;
 
+logic [255:0] instr_r, instr_w;
 logic [255:0] n_r, n_w, d_r, d_w, enc_r, enc_w, dec_r, dec_w;
 logic [2:0] state_r, state_w, state_save_r, state_save_w;
 logic [6:0] bytes_counter_r, bytes_counter_w;
@@ -67,11 +67,11 @@ task StartWrite;
 endtask
 
 always_comb begin
-    state_save_w = state_save_r;           // Preserve state to goto when data is available
     {n_w, d_w, enc_w} = {n_r, d_r, enc_r}; // Preserve keys and cipher
-    dec_w = dec_r;                         // Preserve message
-    avm_address_w = STATUS_BASE;           // Read at STATUS_BASE by default
-    avm_read_w = 0;                        // No r/w by default
+    instr_w = instr_r; // Preserve get data
+    dec_w = dec_r;  // Preserve message
+    avm_address_w = STATUS_BASE; // Read at STATUS_BASE by default
+    avm_read_w = 0; // No r/w by default
     avm_write_w = 0;
     bytes_counter_w = 0;
     rsa_start_w = 0;
@@ -82,48 +82,48 @@ always_comb begin
             state_w = S_QUERY_RX;
             StartRead(STATUS_BASE);
         end else begin
-            state_w = state_save_r; // Goto save data
-            StartRead(RX_BASE);
-        end
-    end
-    S_GET_KEY: begin // Save keys (n, d)
-        if (avm_waitrequest) begin // Data unavailable
-            state_w = S_GET_KEY; // Wait
-            StartRead(RX_BASE);
-            bytes_counter_w = bytes_counter_r; // DO NOT reset count of bytes received
-        end else begin
-            {n_w, d_w} = {n_r[247:0], d_r, avm_readdata[7:0]}; // Shift byte into n and d
-            if (bytes_counter_r == 63) begin // All 64 bytes received
-                state_w = S_QUERY_RX;
-                state_save_w = S_GET_DATA; // Next available data goes to cipher
-                bytes_counter_w = 0; // Clear byte counter
-            end else begin // Not enough bytes yet
-                state_w = S_QUERY_RX;
-                bytes_counter_w = bytes_counter_r + 1; // Increment byte counter
-            end
-        end
-    end
-    S_GET_DATA: begin // Save cipher enc
-        if (avm_waitrequest) begin
             state_w = S_GET_DATA;
             StartRead(RX_BASE);
-            bytes_counter_w = bytes_counter_r;
+        end
+    end
+    S_GET_DATA: begin // Save get data
+        if (avm_waitrequest) begin // Data unavailable
+            state_w         = S_GET_DATA; // Wait
+            bytes_counter_w = bytes_counter_r; // DO NOT reset count of bytes received
+            StartRead(RX_BASE);
         end else begin
-            enc_w = {enc_r[247:0], avm_readdata[7:0]}; // Shift byte into enc
-            if (bytes_counter_r == 31) begin // All 32 bytes received
-                state_w = S_WAIT_CALCULATE;
-                rsa_start_w = 1; // Start RSACore
+            if (bytes_counter_r == 32) begin // All 32 bytes received
                 bytes_counter_w = 0;
+                instr_w         = 0;
+                case (avm_readdata[1:0]) // Switch cases on 33rd byte
+                2'b00: begin
+                    state_w = S_QUERY_RX;
+                    n_w     = instr_r;
+                end
+                2'b01: begin
+                    state_w = S_QUERY_RX;
+                    d_w     = instr_r;
+                end
+                2'b10: begin // Start RsaCore
+                    state_w     = S_WAIT_CALCULATE;
+                    enc_w       = instr_r;
+                    rsa_start_w = 1;
+                end
+                default begin
+                    state_w = S_QUERY_RX;
+                end
+                endcase
             end else begin // Not enough bytes yet
-                state_w = S_QUERY_RX;
-                bytes_counter_w = bytes_counter_r + 1;
+                state_w         = S_QUERY_RX;
+                bytes_counter_w = bytes_counter_r + 1; // Increment byte counter
+                instr_w         = {instr_r[247:0], avm_readdata[7:0]}; // Shift byte into data
             end
         end
     end
     S_WAIT_CALCULATE: begin
         if (rsa_finished && !rsa_start_r) begin
             state_w = S_QUERY_TX;
-            dec_w = rsa_dec; // Save message
+            dec_w   = rsa_dec; // Save message
         end else begin
             state_w = S_WAIT_CALCULATE;
         end
@@ -141,17 +141,17 @@ always_comb begin
     S_SEND_DATA: begin
         if (avm_waitrequest) begin // Line unavailable
             state_w = S_SEND_DATA;
+            bytes_counter_w = bytes_counter_r; // DO NOT reset count of bytes sent
             StartWrite(TX_BASE);
-            bytes_counter_w = bytes_counter_r;
         end else begin
             if (bytes_counter_r == 30) begin
-                state_w = S_QUERY_RX;
+                state_w         = S_QUERY_RX;
                 bytes_counter_w = 0;
-                enc_w = 0;
+                enc_w           = 0;
             end else begin
-                state_w = S_QUERY_TX;
-                dec_w = dec_r << 8; // Shift message by one byte
+                state_w         = S_QUERY_TX;
                 bytes_counter_w = bytes_counter_r + 1;
+                dec_w           = dec_r << 8; // Shift message by one byte
             end
         end
     end
@@ -160,6 +160,7 @@ end
 
 always_ff @(posedge avm_clk or posedge avm_rst) begin
     if (avm_rst) begin
+        instr_r <= 0;
         n_r <= 0;
         d_r <= 0;
         enc_r <= 0;
@@ -168,10 +169,10 @@ always_ff @(posedge avm_clk or posedge avm_rst) begin
         avm_read_r <= 0;
         avm_write_r <= 0;
         state_r <= S_QUERY_RX;
-        state_save_r <= S_GET_KEY;
         bytes_counter_r <= 0;
         rsa_start_r <= 0;
     end else begin
+        instr_r <= instr_w;
         n_r <= n_w;
         d_r <= d_w;
         enc_r <= enc_w;
@@ -180,7 +181,6 @@ always_ff @(posedge avm_clk or posedge avm_rst) begin
         avm_read_r <= avm_read_w;
         avm_write_r <= avm_write_w;
         state_r <= state_w;
-        state_save_r <= state_save_w;
         bytes_counter_r <= bytes_counter_w;
         rsa_start_r <= rsa_start_w;
     end

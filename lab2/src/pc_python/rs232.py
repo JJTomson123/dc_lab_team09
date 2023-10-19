@@ -13,7 +13,7 @@ s = Serial(
     rtscts=False
 )
 fp_key = open('key.bin', 'rb')
-fp_enc = open('enc.bin', 'rb')
+fp_enc = open('golden/enc3.bin', 'rb')
 fp_dec = open('dec.bin', 'wb')
 assert fp_key and fp_enc and fp_dec
 
@@ -21,9 +21,13 @@ key = fp_key.read(64)
 enc = fp_enc.read()
 assert len(enc) % 32 == 0
 
-s.write(key)
+s.write(key[0:32])
+s.write(b'\x00')
+s.write(key[32:64])
+s.write(b'\x01')
 for i in range(0, len(enc), 32):
     s.write(enc[i:i+32])
+    s.write(b'\x02')
     dec = s.read(31)
     fp_dec.write(dec)
 
