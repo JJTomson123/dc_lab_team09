@@ -59,11 +59,16 @@ always_comb begin
             enable_w = enable_r;
         end 
         else begin
-            state_w = S_READ;
             if (bit_counter_r == 4'b1000) begin
                 sdat_w = 1'bz;
                 bit_counter_w = 0;
                 enable_w = 0;
+                if (setting_data_r==0) begin
+                    state_w = S_END;
+                end
+                else begin
+                    state_w = S_READ;
+                end
             end
             else begin
                 sdat_w = sdat_r;
@@ -71,6 +76,7 @@ always_comb begin
                 setting_data_w = setting_data_r << 1;
                 bit_counter_w = bit_counter_r + 1;
                 enable_w = enable_r;
+                state_w = S_READ;
             end
         end
     end
@@ -79,13 +85,8 @@ always_comb begin
         bit_counter_w = bit_counter_r;
         sdat_w = sdat_r;
         if (sclk_r) begin
-            if (setting_data_r==0) begin
-                state_w = S_END;
-                enable_w = 0;
-            end else begin
-                state_w = S_CHANGE;
-                enable_w = 1;
-            end
+            state_w = S_CHANGE;
+            enable_w = 1;
         end
         else begin
             state_w = S_READ;
