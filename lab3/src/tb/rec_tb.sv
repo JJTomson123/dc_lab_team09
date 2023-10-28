@@ -1,13 +1,21 @@
 module rec_tb;
 	localparam CLK = 10;
 	localparam HCLK = CLK/2;
+	localparam lrcclk = CLK*16;
+	localparam lrchclk = (CLK*16)/2;
 
 
-
+    logic temp_clk, templrcclk;
     wire i_AUD_BCLK, i_AUD_ADCLRCK;
 	logic start, pause, i_rst_n, stop;
-	initial i_AUD_BCLK = 0;
-	always #HCLK i_AUD_BCLK = ~i_AUD_BCLK;
+	initial temp_clk = 0;
+	initial begin
+        templrcclk = 1;
+		#(3*CLK)
+		templrcclk = 0;
+	end
+	always #HCLK temp_clk = ~temp_clk;
+	always #lrchclk templrcclk = ~templrcclk;
 	logic [19:0] addr_record;
     logic [15:0] data_record;
 	logic i_AUD_ADCDAT;
@@ -25,10 +33,11 @@ module rec_tb;
 	.i_stop(stop),
 	.i_data(i_AUD_ADCDAT),
 	.o_address(addr_record),
-	.o_data(data_record),
+	.o_data(data_record)
 );
 
-    
+    assign i_AUD_BCLK = temp_clk;
+	assign i_AUD_ADCLRCK = templrcclk;
 
 	initial begin
 		$fsdbDumpfile("lab3_rec.fsdb");
@@ -40,32 +49,14 @@ module rec_tb;
 		start <= 1;
 		@(posedge i_AUD_BCLK);
 		start <= 0;
-		for (int i = 0; i < 21; i++) begin
-			for (int j = 0; j < 8; j++) begin
-				@(posedge o_I2C_SCLK);
-				data = {data[166:0],i2c_sdat};
-			end
-			@(negedge o_I2C_SCLK);
-			if (i==20) begin
-				ack = 0;
-				break;
-			end else begin
-				ack = 1;
-			end
-			@(negedge o_I2C_SCLK);
-			ack = 0;
+		$display("=========");
+		for (int i = 0; i < 16; i++) begin
+			i_AUD_ADCDAT = data[47];
+			data = data << 1;
+			$write("%1b", i_AUD_ADCDAT);
+			@(posedge i_AUD_BCLK);
 		end
-		@(posedge fin);
-		for (int k=0; k<7; k++) begin
-			$display("=========");
-			$write("data %3d = ",k);
-			for (int x=0; x<3; x++) begin
-				for (int y=0; y<8; y++) begin
-				$write("%1b", data[((167-y)-x*8)-24*k]);
-				end
-			end
-			$write("\n");
-		end
+		$write("\n");
 		$display("=========");
 		$finish;
 	end
