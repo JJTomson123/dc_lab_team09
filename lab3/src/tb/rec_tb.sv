@@ -1,19 +1,15 @@
 module rec_tb;
 	localparam CLK = 10;
 	localparam HCLK = CLK/2;
-	localparam lrcclk = CLK*16;
-	localparam lrchclk = (CLK*16)/2;
+	localparam lrcclk = CLK*40;
+	localparam lrchclk = CLK*20;
 
 
     logic temp_clk, templrcclk;
     wire i_AUD_BCLK, i_AUD_ADCLRCK;
 	logic start, pause, i_rst_n, stop;
 	initial temp_clk = 0;
-	initial begin
-        templrcclk = 1;
-		#(3*CLK)
-		templrcclk = 0;
-	end
+	initial templrcclk = 1;
 	always #HCLK temp_clk = ~temp_clk;
 	always #lrchclk templrcclk = ~templrcclk;
 	logic [19:0] addr_record;
@@ -45,18 +41,26 @@ module rec_tb;
 		i_rst_n = 0;
 		#(2*CLK)
 		i_rst_n = 1;
-		@(posedge i_AUD_BCLK);
+		@(negedge i_AUD_ADCLRCK);
 		start <= 1;
 		@(posedge i_AUD_BCLK);
 		start <= 0;
-		$display("=========");
-		for (int i = 0; i < 16; i++) begin
-			i_AUD_ADCDAT = data[47];
-			data = data << 1;
-			$write("%1b", i_AUD_ADCDAT);
+		for (int i = 0; i < 1; i++) begin
+			for (int i = 0; i < 16; i++) begin
+                @(negedge i_AUD_BCLK);
+				i_AUD_ADCDAT = data[47];
+				data = data << 1;
+			end
 			@(posedge i_AUD_BCLK);
+			stop <= 1;
+			@(posedge i_AUD_BCLK);
+			stop <= 0;
+			@(posedge i_AUD_ADCLRCK);
 		end
-		$write("\n");
+		$display("=========");
+		$display("data : %16b",data_record);
+		$display("=========");
+		$display("addr : %5h",addr_record);
 		$display("=========");
 		$finish;
 	end

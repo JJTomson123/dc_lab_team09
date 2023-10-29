@@ -24,8 +24,8 @@ logic [15:0] data_r, data_w;
 logic [19:0] addr_r, addr_w;
 logic [5:0] bit_counter_r, bit_counter_w;
 
-assign o_data = ((state_r == S_START)&&i_lrc) ? data_r : 16'b0;
-assign o_address = ((state_r == S_START)&&i_lrc) ? addr_r : 20'h00000;
+assign o_data = (state_r == S_START) ? data_r : o_data;
+assign o_address = (state_r == S_START) ? addr_r : o_address;
 
 
 always_comb begin
@@ -41,9 +41,21 @@ always_comb begin
             state_w = S_IDLE;
         end
     end
-    S_START: begin
-        if (~i_lrc) begin
-            if(bit_counter_r==15) begin
+    S_START: begin     
+        if (i_pause) begin
+            state_w = S_PAUSE;
+            addr_w = addr_r;
+            bit_counter_w = bit_counter_r;
+            data_w = data_r;
+        end
+        else if (i_stop) begin
+            state_w = S_STOP;
+            addr_w = addr_r;
+            bit_counter_w = 0;
+            data_w = data_r;
+        end
+        else if (~i_lrc) begin
+            if(bit_counter_r==16) begin
                 data_w = {data_r[14:0],i_data};
                 state_w = S_START;
                 addr_w = addr_r;
@@ -56,20 +68,8 @@ always_comb begin
                 bit_counter_w = bit_counter_r + 1;
             end
         end 
-        else if (i_pause) begin
-            state_w = S_PAUSE;
-            addr_w = addr_r;
-            bit_counter_w = bit_counter_r;
-            data_w = data_r;
-        end
-        else if (i_stop) begin
-            state_w = S_STOP;
-            addr_w = addr_r;
-            bit_counter_w = 0;
-            data_w = data_r;
-        end
         else begin
-            if(bit_counter_r==15) begin
+            if(bit_counter_r==16) begin
                 data_w = 16'b0;
                 state_w = S_START;
                 addr_w = addr_r + 1;
