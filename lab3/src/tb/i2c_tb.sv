@@ -1,4 +1,4 @@
-module tb;
+module i2c_tb;
 	localparam CLK = 10;
 	localparam HCLK = CLK/2;
 
