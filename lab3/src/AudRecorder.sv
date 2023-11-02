@@ -24,8 +24,8 @@ logic [15:0] data_r, data_w;
 logic [19:0] addr_r, addr_w;
 logic [5:0] bit_counter_r, bit_counter_w;
 
-assign o_data = (state_r == S_START) ? data_r : o_data;
-assign o_address = (state_r == S_START) ? addr_r : o_address;
+assign o_data = data_r;
+assign o_address = addr_r;
 
 
 always_comb begin
