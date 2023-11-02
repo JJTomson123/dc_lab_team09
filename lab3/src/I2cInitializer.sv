@@ -36,9 +36,31 @@ assign o_oen = enable_r;
 assign o_finished = done_r;
 
 always_comb begin
+    case(state_r)
+    S_IDLE: begin
+        if (i_start) state_w = S_CHANGE;
+        else state_w = S_IDLE;
+    end
+    S_CHANGE: begin
+        if (sclk_r) state_w = S_CHANGE;
+        else state_w = S_READ;
+    end
+    S_READ: begin
+        if (sclk_r) begin
+            if (acked_r && bit_counter_r == 5'd24 && cmd_counter_r == 3'd6) state_w = S_END;
+            else state_w = S_CHANGE;
+        end
+        else state_w = S_READ;
+    end
+    S_END: state_w = S_IDLE;
+    endcase
+end
+
+always_comb begin
     setting_data_w = setting_data_r;
     done_w = done_r;
     acked_w = acked_r;
+    bit_counter_w = bit_counter_r;
     cmd_counter_w = cmd_counter_r;
 	case(state_r)
     S_IDLE: begin
@@ -46,30 +68,24 @@ always_comb begin
         bit_counter_w = 0;
         if (i_start) begin
             sdat_w = 0;
-            state_w = S_CHANGE;
             enable_w = 1;
             done_w = 0;
         end else begin
             sdat_w = 1;
-            state_w = S_IDLE;
             enable_w = 0;
         end
     end
     S_CHANGE: begin
         sclk_w = 0;
         if (sclk_r) begin
-            state_w = S_CHANGE;
             sdat_w = sdat_r;
-            bit_counter_w = bit_counter_r;
             enable_w = enable_r;
-        end 
+        end
         else begin
-            state_w = S_READ;
             if (bit_counter_r == 5'd24) begin
                 if (!acked_r) begin
                     sdat_w = 1'bz;
                     enable_w = 0;
-                    acked_w = 1
                 end else if (cmd_counter_r == 3'd6) begin
                     sdat_w = 1'b0;
                     enable_w = 1;
@@ -82,46 +98,39 @@ always_comb begin
                     sdat_w = 1'bz;
                     enable_w = 0;
                 end else begin
-                    sdat_w = setting_data_r[167];
-                    setting_data_w = setting_data_r << 1;
-                    bit_counter_w = bit_counter_r + 1;
+                    {sdat_w, setting_data_w} = {setting_data_r, 1'b0};
                     enable_w = 1;
                 end
             end else begin
                 acked_w = 0;
-                sdat_w = setting_data_r[167];
-                setting_data_w = setting_data_r << 1;
-                bit_counter_w = bit_counter_r + 1;
+                {sdat_w, setting_data_w} = {setting_data_r, 1'b0};
                 enable_w = 1;
             end
         end
     end
     S_READ: begin
         sclk_w = 1;
-        bit_counter_w = bit_counter_r;
         sdat_w = sdat_r;
         if (sclk_r) begin
-            state_w = S_CHANGE;
             if (bit_counter_r == 5'd24) begin
                 if (!acked_r) begin
                     acked_w = 1;
                 end else if (cmd_counter_r == 3'd6) begin
-                    state_w = S_END;
                     sdat_w = 1;
+                    bit_counter_w = 0;
+                    cmd_counter_w = 0;
                 end else begin
                     sdat_w = 0;
+                    bit_counter_w = 0;
                     cmd_counter_w = cmd_counter_r + 1;
                 end
             end else if (bit_counter_r == 5'd8 || bit_counter_r == 5'd16) begin
                 if (!acked_r) begin
                     acked_w = 1;
-                end
-            end
+                end else bit_counter_w = bit_counter_r + 1;
+            end else bit_counter_w = bit_counter_r + 1;
         end
-        else begin
-            state_w = S_READ;
-            enable_w = enable_r;
-        end
+        else enable_w = enable_r;
     end
     S_END: begin
         sdat_w = 1;
@@ -129,7 +138,6 @@ always_comb begin
         enable_w = 0;
         bit_counter_w = 0;
         cmd_counter_w = 0;
-        state_w = S_IDLE;
         done_w = 1;
     end
     endcase

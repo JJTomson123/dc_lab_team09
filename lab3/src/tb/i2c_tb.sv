@@ -1,3 +1,5 @@
+`timescale 1us/100ns
+
 module i2c_tb;
 	localparam CLK = 10;
 	localparam HCLK = CLK/2;
@@ -5,47 +7,92 @@ module i2c_tb;
 	logic i_clk_100K, start_cal, fin, i_rst_n;
 	initial i_clk_100K = 0;
 	always #HCLK i_clk_100K = ~i_clk_100K;
-	logic o_I2C_SCLK,i2c_oen, ack;
-	logic [167:0] data;
-	wire i2c_sdat;
-
+	logic i2c_sclk, i2c_oen, ack, sdat_write, comm;
+	logic [7:0] data;
+	wire  i2c_sdat;
 
     I2cInitializer init0(
 	.i_rst_n(i_rst_n),
 	.i_clk(i_clk_100K),
 	.i_start(start_cal),
 	.o_finished(fin),
-	.o_sclk(o_I2C_SCLK),
+	.o_sclk(i2c_sclk),
 	.o_sdat(i2c_sdat),
 	.o_oen(i2c_oen) // you are outputing (you are not outputing only when you are "ack"ing.)
     );
 
-	assign i2c_sdat = (ack && !i2c_oen) ? 1'b0 : 1'bz;
+	assign i2c_sdat = (ack && !i2c_oen) ? sdat_write : 1'bz;
 
 	initial begin
 		$fsdbDumpfile("lab3_i2c.fsdb");
 		$fsdbDumpvars;
 		i_rst_n = 0;
+		start_cal = 0;
 		ack = 0;
+		comm = 0;
 		#(2*CLK)
 		i_rst_n = 1;
 		@(posedge i_clk_100K);
 		start_cal <= 1;
 		@(posedge i_clk_100K);
 		start_cal <= 0;
-		for (int i = 0; i < 21; i++) begin
+		while (!fin) begin
+			while (!comm) begin
+				@(edge i2c_sdat or posedge fin)
+				if (fin) break;
+				if (i2c_sclk) comm = !i2c_sdat;
+			end
+			if (fin) break;
+			for (int i = 0; i < 8; i++) begin
+				@(posedge i2c_sclk);
+				data = {data[6:0], i2c_sdat};
+			end
+			$display("=========");
+			$display("device address: %8b", data);
+			if (data == 8'b0011_0100) begin
+				$display("address matched! communication start");
+				@(negedge i2c_sclk);
+				ack = 1;
+				sdat_write = 0;
+				@(negedge i2c_sclk);
+				ack = 0;
+
+				$write("data = ");
+				for (int i = 0; i < 8; i++) begin
+					@(posedge i2c_sclk);
+					data = {data[6:0], i2c_sdat};
+				end
+				$write("%8b", data);
+				@(negedge i2c_sclk);
+				ack = 1;
+				sdat_write = 0;
+				@(negedge i2c_sclk);
+				ack = 0;
+				
+				for (int i = 0; i < 8; i++) begin
+					@(posedge i2c_sclk);
+					data = {data[6:0], i2c_sdat};
+				end
+				$write("%8b\n", data);
+			end
+			else begin
+				$display("address not matched! wait for start signal");
+			end
+			comm = 0;
+		end
+		/* for (int i = 0; i < 21; i++) begin
 			for (int j = 0; j < 8; j++) begin
-				@(posedge o_I2C_SCLK);
+				@(posedge i2c_sclk);
 				data = {data[166:0],i2c_sdat};
 			end
-			@(negedge o_I2C_SCLK);
+			@(negedge i2c_sclk);
 			if (i==20) begin
 				ack = 0;
 				break;
 			end else begin
 				ack = 1;
 			end
-			@(negedge o_I2C_SCLK);
+			@(negedge i2c_sclk);
 			ack = 0;
 		end
 		@(posedge fin);
@@ -59,7 +106,7 @@ module i2c_tb;
 			end
 			$write("\n");
 		end
-		$display("=========");
+		$display("========="); */
 		$finish;
 	end
 
