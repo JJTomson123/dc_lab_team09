@@ -80,7 +80,7 @@ always_comb begin
         counter_w = counter_r;
         data_w    = data_r;
         del_data_w = del_data_r;
-        if (!daclrck_p && i_daclrck) begin // Next data when R->L
+        if (!daclrck_p && i_daclrck) begin // Next data when L->R
             if (i_fast)             addr_w = addr_r + i_speed + 1; // Fast playback
             else if (i_slow_0 || i_slow_1) begin // Slow playback
                 if (counter_r == 0) addr_w = addr_r + 1;

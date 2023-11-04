@@ -15,7 +15,7 @@ module play_tb;
     logic [15:0] dac_data;
 	logic o_AUD_DACDAT, enable;
 
-    initial dac_data = 16'b000_0000_0_1001_0111;
+    initial dac_data = 16'b1010_1100_1001_0111;
 
 
 AudPlayer player0(
