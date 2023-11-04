@@ -6,14 +6,14 @@ module AudDSP(
     input i_start,
     input i_pause,
     input i_stop,
-    input [3:0] i_speed,
+    input [2:0] i_speed,
     input i_fast,
     input i_slow_0, // constant interpolation
     input i_slow_1, // linear interpolation
     
     inout i_daclrck,
     
-    input  [15:0] i_sram_data,
+    input signed [15:0] i_sram_data,
     
     output [15:0] o_dac_data,
     output [19:0] o_sram_addr
@@ -31,7 +31,6 @@ logic [20:0] addr_r, addr_w;
 logic signed [15:0] data_r, data_w, data_nxt_r, data_nxt_w, del_data_r, del_data_w;
 logic [2:0] counter_r, counter_w;
 
-
 assign o_sram_addr = addr_r[19:0];
 assign o_dac_data = data_r;
 
@@ -43,14 +42,13 @@ always_comb begin
         else         state_w = S_IDLE;
     end
     S_PLAY: begin
-        if (i_stop)                       state_w = S_IDLE;
+        if (i_stop || addr_r[20])         state_w = S_IDLE;
         else if (i_pause)                 state_w = S_PAUSE;
         else if (!daclrck_p && i_daclrck) state_w = S_CALC;
         else                              state_w = S_PLAY;
     end
     S_CALC: begin
-        if (addr_r[20]) state_w = S_IDLE;
-        else            state_w = S_PLAY;
+        state_w = S_PLAY;
     end
     S_PAUSE: begin
         if (i_start) state_w = S_PLAY;
@@ -64,21 +62,17 @@ always_comb begin
     // design your control here
     case(state_r)
     S_IDLE: begin
+        addr_w     = 0;
         counter_w  = 0;
         data_w     = 0;
         del_data_w = 0;
-        if (i_start) begin
-            addr_w     = i_daclrck;
-            data_nxt_w = i_sram_data;
-        end
-        else begin
-            addr_w     = 0;
-            data_nxt_w = 0;
-        end
+        if (i_start) data_nxt_w = i_sram_data;
+        else         data_nxt_w = 0;
     end
     S_PLAY: begin
         counter_w = counter_r;
         data_w    = data_r;
+        data_nxt_w = data_nxt_r;
         del_data_w = del_data_r;
         if (!daclrck_p && i_daclrck) begin // Next data when L->R
             if (i_fast)             addr_w = addr_r + i_speed + 1; // Fast playback
@@ -102,7 +96,7 @@ always_comb begin
 
             if (counter_r == 0) begin
                 {data_nxt_w, data_w} = {i_sram_data, data_nxt_r};
-                del_data_w = (i_sram_data - data_nxt_r) / (i_speed + 1); // used for 1st-order interpol
+                del_data_w = (i_sram_data - data_nxt_r) / $signed({1'b0, i_speed + 1}); // used for 1st-order interpol
             end else begin
                 data_nxt_w = data_nxt_r;
                 del_data_w = del_data_r;
@@ -110,8 +104,8 @@ always_comb begin
                 else          data_w = data_r;
             end
 
-            if (i_fast || counter_r + 1 >= i_speed) counter_w = 0;
-            else                                    counter_w = counter_r + 1;
+            if (i_fast || counter_r >= i_speed) counter_w = 0;
+            else                                counter_w = counter_r + 1;
         end
     end
     S_PAUSE: begin
