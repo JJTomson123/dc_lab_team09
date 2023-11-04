@@ -17,7 +17,7 @@ module rec_tb;
 	logic i_AUD_ADCDAT;
     logic [47:0] data;
 
-    initial data = 48'b000_0000_0_1001_0111_000_0001_0_1001_0111_000_0010_0_0111_1001;
+    initial data = 48'b100_0000_0_1001_0111_000_0001_0_1001_0111_000_0010_0_0111_1001;
 
 
     AudRecorder recorder0(
@@ -39,12 +39,17 @@ module rec_tb;
 		$fsdbDumpfile("lab3_rec.fsdb");
 		$fsdbDumpvars;
 		i_rst_n = 0;
+		start   = 0;
+		pause   = 0;
+		stop    = 0;
+		i_AUD_ADCDAT = 1;
 		#(2*CLK)
 		i_rst_n = 1;
-		@(negedge i_AUD_ADCLRCK);
-		start <= 1;
-		@(posedge i_AUD_BCLK);
-		start <= 0;
+		#(CLK)
+		start = 1;
+		#(CLK)
+		start = 0;
+		@(posedge i_AUD_ADCLRCK);
 		for (int i = 0; i < 1; i++) begin
 			for (int i = 0; i < 16; i++) begin
                 @(negedge i_AUD_BCLK);
