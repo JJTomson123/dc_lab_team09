@@ -4,16 +4,16 @@ module i2c_tb;
 	localparam CLK = 10;
 	localparam HCLK = CLK/2;
 
-	logic i_clk_100K, start_cal, fin, i_rst_n;
-	initial i_clk_100K = 0;
-	always #HCLK i_clk_100K = ~i_clk_100K;
+	logic i_clk_100k, start_cal, fin, i_rst_n;
+	initial i_clk_100k = 0;
+	always #HCLK i_clk_100k = ~i_clk_100k;
 	logic i2c_sclk, i2c_oen, ack, sdat_write, comm;
 	logic [7:0] data;
 	wire  i2c_sdat;
 
     I2cInitializer init0(
 	.i_rst_n(i_rst_n),
-	.i_clk(i_clk_100K),
+	.i_clk(i_clk_100k),
 	.i_start(start_cal),
 	.o_finished(fin),
 	.o_sclk(i2c_sclk),
@@ -32,9 +32,9 @@ module i2c_tb;
 		comm = 0;
 		#(2*CLK)
 		i_rst_n = 1;
-		@(posedge i_clk_100K);
+		@(posedge i_clk_100k);
 		start_cal <= 1;
-		@(posedge i_clk_100K);
+		@(posedge i_clk_100k);
 		start_cal <= 0;
 		while (!fin) begin
 			while (!comm) begin

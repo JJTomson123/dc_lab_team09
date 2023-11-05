@@ -26,7 +26,7 @@ logic [5:0] bit_counter_r, bit_counter_w;
 logic lr_prev;
 
 assign o_data = data_r;
-assign o_address = addr_r;
+assign o_address = addr_r[19:0];
 
 always_comb begin
     // FSM
@@ -36,7 +36,7 @@ always_comb begin
         else         state_w = S_IDLE;
     end
     S_REC: begin
-        if (i_stop || addr_r[20])   state_w = S_IDLE;
+        if (i_stop)   state_w = S_IDLE;
         else if (i_pause)           state_w = S_PAUSE;
         else if (!lr_prev && i_lrc) state_w = S_GET;
         else                        state_w = S_REC;
@@ -80,10 +80,10 @@ always_comb begin
     endcase
 end
 
-always_ff @(posedge i_clk or posedge i_rst_n) begin
+always_ff @(posedge i_clk or negedge i_rst_n) begin
 	if (!i_rst_n) begin
         state_r       <= S_IDLE;
-        lr_prev       <= i_lrc;
+        lr_prev       <= 0;
         addr_r        <= 0;
         data_r        <= 0;
         bit_counter_r <= 0;

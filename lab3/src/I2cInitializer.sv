@@ -111,6 +111,7 @@ always_comb begin
     S_READ: begin
         sclk_w = 1;
         sdat_w = sdat_r;
+		  enable_w = enable_r;
         if (sclk_r) begin
             if (bit_counter_r == 5'd24) begin
                 if (!acked_r) begin
@@ -130,7 +131,6 @@ always_comb begin
                 end else bit_counter_w = bit_counter_r + 1;
             end else bit_counter_w = bit_counter_r + 1;
         end
-        else enable_w = enable_r;
     end
     S_END: begin
         sdat_w = 1;
@@ -143,7 +143,7 @@ always_comb begin
     endcase
 end
 
-always_ff @(posedge i_clk or posedge i_rst_n) begin
+always_ff @(posedge i_clk or negedge i_rst_n) begin
 	if (!i_rst_n) begin
         state_r <= S_IDLE;
         sclk_r <= 1;
