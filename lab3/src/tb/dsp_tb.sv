@@ -3,10 +3,10 @@
 module i2c_tb;
 
 
-localparam CLK = 20;
+localparam CLK = 84;
 localparam HCLK = CLK/2;
 /* localparam LRC = 31250; */
-localparam LRC = 3125;
+localparam LRC = 31500;
 localparam HLRC = LRC/2;
 localparam [15:0] test_data[0:6] = {
     16'hAC97,
@@ -18,19 +18,19 @@ localparam [15:0] test_data[0:6] = {
     16'h29B5
 };
 
-logic clk_50M;
-initial clk_50M = 0;
-always #HCLK clk_50M = ~clk_50M;
+logic clk_12m;
+initial clk_12m = 1;
+always #HCLK clk_12m = ~clk_12m;
 wire i_clk;
-assign i_clk = clk_50M;
+assign i_clk = clk_12m;
 
-logic clk_32K;
-initial clk_32K = 0;
-always #HLRC clk_32K = ~clk_32K;
+logic clk_32k;
+initial clk_32k = 0;
+always #HLRC clk_32k = ~clk_32k;
 wire i_daclrck;
-assign i_daclrck = clk_32K;
+assign i_daclrck = clk_32k;
 
-logic i_rst_n, start, pause, stop, fast, interpol;
+logic i_rst_n, start, pause, stop, fast, interpol, done;
 logic [2:0] speed;
 logic [15:0] dac_data;
 logic [19:0] addr_play;
@@ -54,10 +54,12 @@ AudDSP dsp0(
 .i_fast(fast),
 .i_slow_0(slow_0), // constant interpolation
 .i_slow_1(slow_1), // linear interpolation
+.i_addr_end(20'd8),
 .i_daclrck(i_daclrck),
 .i_sram_data(data_play),
 .o_dac_data(dac_data),
-.o_sram_addr(addr_play)
+.o_sram_addr(addr_play),
+.o_done(done)
 );
 
 initial begin
@@ -68,9 +70,9 @@ initial begin
     speed = 3'd2;
     #(2*CLK)
     i_rst_n = 1;
-    @(posedge clk_50M);
+    @(posedge clk_12m);
     start = 1;
-    @(posedge clk_50M);
+    @(posedge clk_12m);
     start = 0;
     #(80*LRC)
     $finish;

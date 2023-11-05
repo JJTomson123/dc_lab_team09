@@ -10,12 +10,13 @@ module AudRecorder(
 	input i_data,
 	
     output [19:0] o_address,
-	output [15:0] o_data
+	output [15:0] o_data,
+    output        o_done
 );
 
 
 localparam S_IDLE  = 0;
-localparam S_REC   = 1;
+localparam S_RECD  = 1;
 localparam S_GET   = 2;
 localparam S_PAUSE = 3;
 
@@ -24,57 +25,69 @@ logic [15:0] data_r, data_w;
 logic [20:0] addr_r, addr_w;
 logic [5:0] bit_counter_r, bit_counter_w;
 logic lr_prev;
+logic pausing_r, pausing_w, stopping_r, stopping_w;
 
 assign o_data = data_r;
 assign o_address = addr_r[19:0];
+assign o_done = (state_r == S_IDLE);
 
 always_comb begin
     // FSM
     case(state_r)
     S_IDLE: begin
-        if (i_start) state_w = S_REC;
+        if (i_start) state_w = S_RECD;
         else         state_w = S_IDLE;
     end
-    S_REC: begin
-        if (i_stop)   state_w = S_IDLE;
+    S_RECD: begin
+        if (i_stop)                 state_w = S_IDLE;
         else if (i_pause)           state_w = S_PAUSE;
         else if (!lr_prev && i_lrc) state_w = S_GET;
-        else                        state_w = S_REC;
+        else                        state_w = S_RECD;
     end
     S_GET: begin
-        if (bit_counter_r == 16) state_w = S_REC;
-        else                     state_w = S_GET;
+        if (bit_counter_r == 16) begin
+            if (i_stop || stopping_r || addr_r == 19'h0000F) state_w = S_IDLE;
+            else if (i_pause || pausing_r)                   state_w = S_PAUSE;
+            else                                             state_w = S_RECD;
+        end else                                             state_w = S_GET;
     end
     S_PAUSE: begin
-        if (i_start) state_w = S_REC;
-        else         state_w = S_IDLE;
+        if (i_start)     state_w = S_RECD;
+        else if (i_stop) state_w = S_IDLE;
+        else             state_w = S_PAUSE;
     end
     endcase
 end
 
 always_comb begin
 	// design your control here
+    pausing_w = 0;
+    stopping_w = 0;
     case(state_r)
     S_IDLE: begin
-        addr_w        = 0;
         bit_counter_w = 0;
-        data_w        = 0;
+        data_w        = data_r;
+        if (i_start) addr_w = 0;
+        else         addr_w = addr_r;
     end
-    S_REC, S_PAUSE: begin
+    S_RECD, S_PAUSE: begin
         addr_w        = addr_r;
         bit_counter_w = 0;
         data_w        = data_r;
     end
     S_GET: begin
         if (bit_counter_r == 16) begin
-            addr_w        = addr_r + 1;
+            if (i_stop || stopping_r || addr_r == 19'h0000F) addr_w = addr_r;
+            else                                             addr_w = addr_r + 1;
             bit_counter_w = 0;
-            data_w        = 0;
+            data_w        = data_r;
         end
         else begin
             addr_w        = addr_r;
             bit_counter_w = bit_counter_r + 1;
             data_w        = {data_r[14:0], i_data};
+            pausing_w     = i_pause || pausing_r;
+            stopping_w    = i_stop || stopping_r;
         end
     end
     endcase
@@ -87,6 +100,8 @@ always_ff @(posedge i_clk or negedge i_rst_n) begin
         addr_r        <= 0;
         data_r        <= 0;
         bit_counter_r <= 0;
+        pausing_r     <= 0;
+        stopping_r    <= 0;
 	end
 	else begin
         state_r       <= state_w;
@@ -94,6 +109,8 @@ always_ff @(posedge i_clk or negedge i_rst_n) begin
         addr_r        <= addr_w;
         data_r        <= data_w;
         bit_counter_r <= bit_counter_w;
+        pausing_r     <= pausing_w;
+        stopping_r    <= stopping_w;
 	end
 end
 

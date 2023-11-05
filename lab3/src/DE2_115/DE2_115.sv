@@ -158,13 +158,6 @@ Debounce deb0(
 	.o_neg(key0down) 
 );
 
-Debounce deb0fast(
-	.i_in(KEY[0]), // play start/pause
-	.i_rst_n(KEY[3]),
-	.i_clk(CLK_12M),
-	.o_neg(key0down_fast) 
-);
-
 Debounce deb1(
 	.i_in(KEY[1]), // play/rec stop
 	.i_rst_n(KEY[3]),
@@ -185,8 +178,7 @@ Top top0(
 	.i_play_sel(SW[0]), // play when high, rec when low
 	.i_speed_sel(SW[1]), // accel when high, decel when low
 	.i_inter_sel(SW[2]), // interpol when high
-	.i_key_0(key0down), // rec start and pause
-	.i_key_0_fast(key0down_fast), // play start and pause
+	.i_key_0(key0down), // play/rec start and pause
 	.i_key_1(key1down), // play/rec stop
 	.i_key_2(key2down), // speed change
 	// .i_speed(SW[3:0]), // design how user can decide mode on your own

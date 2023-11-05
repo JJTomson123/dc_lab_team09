@@ -10,13 +10,15 @@ module AudDSP(
     input i_fast,
     input i_slow_0, // constant interpolation
     input i_slow_1, // linear interpolation
+    input [19:0] i_addr_end,
     
     inout i_daclrck,
     
     input signed [15:0] i_sram_data,
     
     output [15:0] o_dac_data,
-    output [19:0] o_sram_addr
+    output [19:0] o_sram_addr,
+    output o_done
 );
 
 
@@ -32,7 +34,8 @@ logic signed [15:0] data_r, data_w, data_nxt_r, data_nxt_w, del_data_r, del_data
 logic [2:0] counter_r, counter_w;
 
 assign o_sram_addr = addr_r[19:0];
-assign o_dac_data = data_r;
+assign o_dac_data  = data_r;
+assign o_done      = (state_r == S_IDLE);
 
 always_comb begin
     // FSM
@@ -42,17 +45,20 @@ always_comb begin
         else         state_w = S_IDLE;
     end
     S_PLAY: begin
-        if (i_stop || addr_r[20])         state_w = S_IDLE;
+        if (i_stop)                       state_w = S_IDLE;
         else if (i_pause)                 state_w = S_PAUSE;
         else if (!daclrck_p && i_daclrck) state_w = S_CALC;
         else                              state_w = S_PLAY;
     end
     S_CALC: begin
-        state_w = S_PLAY;
+        if (i_stop || addr_r >= i_addr_end) state_w = S_IDLE;
+        else if (i_pause)                   state_w = S_PAUSE;
+        else                                state_w = S_PLAY;
     end
     S_PAUSE: begin
-        if (i_start) state_w = S_PLAY;
-        else         state_w = S_IDLE;
+        if (i_start)     state_w = S_PLAY;
+        else if (i_stop) state_w = S_IDLE;
+        else             state_w = S_PAUSE;
     end
     endcase
 end
@@ -64,49 +70,44 @@ always_comb begin
     S_IDLE: begin
         addr_w     = 0;
         counter_w  = 0;
-        data_w     = 0;
+        data_w     = data_r;
         del_data_w = 0;
         if (i_start) data_nxt_w = i_sram_data;
         else         data_nxt_w = 0;
     end
     S_PLAY: begin
         counter_w = counter_r;
-        data_w    = data_r;
         data_nxt_w = data_nxt_r;
         del_data_w = del_data_r;
         if (!daclrck_p && i_daclrck) begin // Next data when L->R
+            if (counter_r == 0) data_w = data_nxt_r;
+            else if (i_slow_1)  data_w = data_r + del_data_r;
+            else                data_w = data_r;
+
             if (i_fast)             addr_w = addr_r + i_speed + 1; // Fast playback
-            else if (i_slow_0 || i_slow_1) begin // Slow playback
+            else begin // Slow playback
                 if (counter_r == 0) addr_w = addr_r + 1;
                 else                addr_w = addr_r;
             end
-            else                    addr_w = addr_r + 1; // Normal playback
         end
-        else addr_w = addr_r;
+        else begin
+            addr_w = addr_r;
+            data_w = data_r;
+        end
     end
     S_CALC: begin
-        if (addr_r[20]) begin
-            addr_w     = 0;
-            counter_w  = 0;
-            data_w     = 0;
-            data_nxt_w = 0;
-            del_data_w = 0;
+        data_w = data_r;
+        addr_w = addr_r;
+        data_nxt_w = i_sram_data;
+
+        if (counter_r == 0) begin
+            del_data_w = (i_sram_data - data_r) / $signed({1'b0, i_speed + 1}); // used for 1st-order interpol
         end else begin
-            addr_w = addr_r;
-
-            if (counter_r == 0) begin
-                {data_nxt_w, data_w} = {i_sram_data, data_nxt_r};
-                del_data_w = (i_sram_data - data_nxt_r) / $signed({1'b0, i_speed + 1}); // used for 1st-order interpol
-            end else begin
-                data_nxt_w = data_nxt_r;
-                del_data_w = del_data_r;
-                if (i_slow_1) data_w = data_r + del_data_r;
-                else          data_w = data_r;
-            end
-
-            if (i_fast || counter_r >= i_speed) counter_w = 0;
-            else                                counter_w = counter_r + 1;
+            del_data_w = del_data_r;
         end
+
+        if (i_fast || counter_r >= i_speed) counter_w = 0;
+        else                                counter_w = counter_r + 1;
     end
     S_PAUSE: begin
         addr_w     = addr_r;
