@@ -184,13 +184,28 @@ Top top0(
 	// .i_speed(SW[3:0]), // design how user can decide mode on your own
 	
 	// AudDSP and SRAM
-	.o_SRAM_ADDR(SRAM_ADDR), // [19:0]
+	/* .o_SRAM_ADDR(SRAM_ADDR), // [19:0]
 	.io_SRAM_DQ(SRAM_DQ), // [15:0]
 	.o_SRAM_WE_N(SRAM_WE_N),
 	.o_SRAM_CE_N(SRAM_CE_N),
 	.o_SRAM_OE_N(SRAM_OE_N),
 	.o_SRAM_LB_N(SRAM_LB_N),
-	.o_SRAM_UB_N(SRAM_UB_N),
+	.o_SRAM_UB_N(SRAM_UB_N), */
+
+
+
+	// SDRAM
+	.o_DRAM_ADDR(DRAM_ADDR),
+	.o_DRAM_BA(DRAM_BA),
+	.o_DRAM_CAS_N(DRAM_CAS_N),
+	.o_DRAM_CKE(DRAM_CKE),
+	.o_DRAM_CLK(DRAM_CLK),
+	.o_DRAM_CS_N(DRAM_CS_N),
+	.io_DRAM_DQ(DRAM_DQ),
+	.o_DRAM_DQM(DRAM_DQM),
+	.o_DRAM_RAS_N(DRAM_RAS_N),
+	.o_DRAM_WE_N(DRAM_WE_N),
+
 	
 	// I2C
 	.i_clk_100k(CLK_100K),

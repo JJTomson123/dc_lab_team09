@@ -1,4 +1,7 @@
-module AudRecorder(
+module AudRecorder #(
+    parameter ADDR_W = 26
+)
+(
 	input i_rst_n, 
 	
     inout i_clk,
@@ -9,7 +12,8 @@ module AudRecorder(
 	input i_stop,
 	input i_data,
 	
-    output [19:0] o_address,
+    output o_dram_write,
+    output [ADDR_W-1:0] o_address,
 	output [15:0] o_data,
     output        o_done
 );
@@ -22,15 +26,16 @@ localparam S_PAUSE = 3;
 
 logic [1:0] state_r, state_w;
 logic [15:0] data_r, data_w;
-logic [20:0] addr_r, addr_w;
+logic [ADDR_W:0] addr_r, addr_w;
 logic [5:0] bit_counter_r, bit_counter_w;
 logic lr_prev;
 logic pausing_r, pausing_w, stopping_r, stopping_w;
-logic done_r, done_w;
+logic done_r, done_w, write_r, write_w;
 
 assign o_data = data_r;
-assign o_address = addr_r[19:0];
+assign o_address = addr_r[ADDR_W-1:0];
 assign o_done = done_r;
+assign o_dram_write = write_r;
 
 always_comb begin
     // FSM
@@ -51,7 +56,7 @@ always_comb begin
     end
     S_GET: begin
         if (bit_counter_r == 16) begin
-            if (i_stop || stopping_r || addr_r == {20{1'b1}}) begin
+            if (i_stop || stopping_r || addr_r == {ADDR_W{1'b1}}) begin
                 state_w = S_IDLE;
                 done_w = 1;
             end
@@ -74,6 +79,7 @@ always_comb begin
 	// design your control here
     pausing_w = 0;
     stopping_w = 0;
+    write_w    = 0;
     case(state_r)
     S_IDLE: begin
         bit_counter_w = 0;
@@ -88,8 +94,8 @@ always_comb begin
     end
     S_GET: begin
         if (bit_counter_r == 16) begin
-            if (i_stop || stopping_r || addr_r == {20{1'b1}}) addr_w = addr_r;
-            else                                              addr_w = addr_r + 1;
+            if (i_stop || stopping_r || addr_r == {ADDR_W{1'b1}}) addr_w = addr_r;
+            else                                                  addr_w = addr_r + 1;
             bit_counter_w = 0;
             data_w        = data_r;
         end
@@ -100,6 +106,8 @@ always_comb begin
             pausing_w     = i_pause || pausing_r;
             stopping_w    = i_stop || stopping_r;
         end
+
+        if (bit_counter_r == 15) write_w = 1;
     end
     endcase
 end
@@ -114,6 +122,7 @@ always_ff @(posedge i_clk or negedge i_rst_n) begin
         pausing_r     <= 0;
         stopping_r    <= 0;
         done_r        <= 0;
+        write_r       <= 0;
 	end
 	else begin
         state_r       <= state_w;
@@ -124,6 +133,7 @@ always_ff @(posedge i_clk or negedge i_rst_n) begin
         pausing_r     <= pausing_w;
         stopping_r    <= stopping_w;
         done_r        <= done_w;
+        write_r       <= write_w;
 	end
 end
 

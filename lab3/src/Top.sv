@@ -10,13 +10,27 @@ module Top (
     // input [3:0] i_speed, // design how user can decide mode on your own
     
     // AudDSP and SRAM
-    output [19:0] o_SRAM_ADDR,
+    /* output [19:0] o_SRAM_ADDR,
     inout  [15:0] io_SRAM_DQ,
     output        o_SRAM_WE_N,
     output        o_SRAM_CE_N,
     output        o_SRAM_OE_N,
     output        o_SRAM_LB_N,
-    output        o_SRAM_UB_N,
+    output        o_SRAM_UB_N, */
+
+
+    // SDRAM
+	output [12:0] o_DRAM_ADDR,
+	output [1:0]  o_DRAM_BA, 
+	output        o_DRAM_CAS_N, //
+	output        o_DRAM_CKE, //
+	output        o_DRAM_CLK,  //
+	output        o_DRAM_CS_N, //
+	inout [31:0]  io_DRAM_DQ, 
+	output [3:0]  o_DRAM_DQM, //
+	output        o_DRAM_RAS_N, //
+	output 		  o_DRAM_WE_N, //
+
     
     // I2C
     input  i_clk_100k,
@@ -59,7 +73,7 @@ parameter S_PLAY_PAUSE = 5;
 
 logic i2c_oen;
 wire i2c_sdat;
-logic [19:0] addr_record, addr_play;
+logic [25:0] addr_record, addr_play, addr_SDC;
 logic [15:0] data_record, data_play, dac_data;
 logic done_play, done_record;
 
@@ -68,14 +82,15 @@ logic i2c_fin, i2c_st_r, i2c_st_w;
 logic fast_r, fast_w;
 logic [2:0]  speed_r, speed_w;
 logic play_st, rec_st, play_en;
-logic [19:0] addr_end_w, addr_end_r;
+logic [25:0] addr_end_w, addr_end_r;
 logic [2:0] state_r, state_w;
+logic dram_write, dram_read, dram_rdy;
 
 assign io_I2C_SDAT = (i2c_oen) ? i2c_sdat : 1'bz;
 
-assign o_SRAM_ADDR = (state_r == S_RECD) ? addr_record : addr_play[19:0];
-assign io_SRAM_DQ  = (state_r == S_RECD) ? data_record : 16'dz; // sram_dq as output
-assign data_play   = (state_r != S_RECD) ? io_SRAM_DQ : 16'd0; // sram_dq as input
+assign addr_SDC = (state_r == S_RECD) ? addr_record : addr_play;
+/* assign io_SRAM_DQ  = (state_r == S_RECD) ? data_record : 16'dz; // sram_dq as output
+assign data_play   = (state_r != S_RECD) ? io_SRAM_DQ : 16'd0; // sram_dq as input */
 
 assign dsp_fast  = fast_r;
 assign dsp_slow0 = !fast_r && !i_inter_sel;
@@ -85,11 +100,11 @@ assign play_st = i_play_sel && i_key_0;
 assign rec_st  = !i_play_sel && i_key_0;
 assign play_en = (state_r == S_PLAY);
 
-assign o_SRAM_WE_N = (state_r == S_RECD) ? 1'b0 : 1'b1;
+/* assign o_SRAM_WE_N = (state_r == S_RECD) ? 1'b0 : 1'b1;
 assign o_SRAM_CE_N = 1'b0;
 assign o_SRAM_OE_N = 1'b0;
 assign o_SRAM_LB_N = 1'b0;
-assign o_SRAM_UB_N = 1'b0;
+assign o_SRAM_UB_N = 1'b0; */
 
 assign o_state = {1'b0,state_r[2:0]};
 
@@ -124,6 +139,8 @@ AudDSP dsp0(
     .i_addr_end(addr_end_r),
     .i_daclrck(i_AUD_DACLRCK),
     .i_sram_data(data_play),
+    .i_dram_rdy(dram_rdy),
+    .o_dram_read(dram_read),
     .o_dac_data(dac_data),
     .o_sram_addr(addr_play),
     .o_done(done_play)
@@ -150,9 +167,33 @@ AudRecorder recorder0(
     .i_pause(rec_st),
     .i_stop(i_key_1),
     .i_data(i_AUD_ADCDAT),
+    .o_dram_write(dram_write),
     .o_address(addr_record),
     .o_data(data_record),
     .o_done(done_record)
+);
+
+// === SDRAMControl ===
+// write / read data to SDRAM
+SDRAMControl sdram0(
+    .i_rst_n(i_rst_n), 
+    .i_clk(i_clk),
+    .i_addr(addr_SDC),
+    .i_data(data_record),
+    .o_data(data_play),
+    .i_write(dram_write),
+    .i_read(dram_read),
+    .o_rdy(dram_rdy),
+	.o_DRAM_ADDR(o_DRAM_ADDR),
+	.o_DRAM_BA(o_DRAM_BA),
+	.o_DRAM_CAS_N(o_DRAM_CAS_N),
+	.o_DRAM_CKE(o_DRAM_CKE),
+	.o_DRAM_CLK(o_DRAM_CLK),
+	.o_DRAM_CS_N(o_DRAM_CS_N),
+	.io_DRAM_DQ(io_DRAM_DQ),
+	.o_DRAM_DQM(o_DRAM_DQM),
+	.o_DRAM_RAS_N(o_DRAM_RAS_N),
+	.o_DRAM_WE_N(o_DRAM_WE_N)
 );
 
 always_comb begin
@@ -172,28 +213,6 @@ always_comb begin
                 speed_w = speed_r - 1;
             end
         end
-        /* case ({i_speed_sel, fast_r})
-        2'b11: begin
-            if (speed_r == 3'd7) speed_w = 3'd7;
-            else speed_w = speed_r + 1;
-        end
-        2'b10: begin
-            if (speed_r == 3'd0) begin
-                fast_w  = 1;
-                speed_w = 3'd1;
-            end else speed_w = speed_r - 1;
-        end
-        2'b01: begin
-            if (speed_r == 3'd0) begin
-                fast_w  = 0;
-                speed_w = 3'd1;
-            end else speed_w = speed_r - 1;
-        end
-        2'b00: begin
-            if (speed_r == 3'd7) speed_w = 3'd7;
-            else speed_w = speed_r + 1;
-        end
-        endcase */
     end else begin
         fast_w = fast_r;
         speed_w = speed_r;
