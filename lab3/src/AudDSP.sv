@@ -32,32 +32,43 @@ logic daclrck_p;
 logic [20:0] addr_r, addr_w;
 logic signed [15:0] data_r, data_w, data_nxt_r, data_nxt_w, del_data_r, del_data_w;
 logic [2:0] counter_r, counter_w;
+logic done_r, done_w;
 
 assign o_sram_addr = addr_r[19:0];
 assign o_dac_data  = data_r;
-assign o_done      = (state_r == S_IDLE);
+assign o_done      = done_r;
 
 always_comb begin
     // FSM
+    done_w = 0;
     case(state_r)
     S_IDLE: begin
         if (i_start) state_w = S_PLAY;
         else         state_w = S_IDLE;
     end
     S_PLAY: begin
-        if (i_stop)                       state_w = S_IDLE;
+        if (i_stop) begin
+            state_w = S_IDLE;
+            done_w = 1;
+        end
         else if (i_pause)                 state_w = S_PAUSE;
         else if (!daclrck_p && i_daclrck) state_w = S_CALC;
         else                              state_w = S_PLAY;
     end
     S_CALC: begin
-        if (i_stop || addr_r >= i_addr_end) state_w = S_IDLE;
+        if (i_stop || addr_r >= i_addr_end) begin
+            state_w = S_IDLE;
+            done_w = 1;
+        end
         else if (i_pause)                   state_w = S_PAUSE;
         else                                state_w = S_PLAY;
     end
     S_PAUSE: begin
-        if (i_start)     state_w = S_PLAY;
-        else if (i_stop) state_w = S_IDLE;
+        if (i_stop) begin
+            state_w = S_IDLE;
+            done_w = 1;
+        end
+        else if (i_start) state_w = S_PLAY;
         else             state_w = S_PAUSE;
     end
     endcase
@@ -128,6 +139,7 @@ always_ff @(posedge i_clk or negedge i_rst_n) begin
         data_r     <= 0;
         data_nxt_r <= 0;
         del_data_r <= 0;
+        done_r     <= 0;
     end
     else begin
         state_r    <= state_w;
@@ -137,6 +149,7 @@ always_ff @(posedge i_clk or negedge i_rst_n) begin
         data_r     <= data_w;
         data_nxt_r <= data_nxt_w;
         del_data_r <= del_data_w;
+        done_r     <= done_w;
     end
 end
 

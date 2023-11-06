@@ -26,34 +26,45 @@ logic [20:0] addr_r, addr_w;
 logic [5:0] bit_counter_r, bit_counter_w;
 logic lr_prev;
 logic pausing_r, pausing_w, stopping_r, stopping_w;
+logic done_r, done_w;
 
 assign o_data = data_r;
 assign o_address = addr_r[19:0];
-assign o_done = (state_r == S_IDLE);
+assign o_done = done_r;
 
 always_comb begin
     // FSM
+    done_w = 0;
     case(state_r)
     S_IDLE: begin
         if (i_start) state_w = S_RECD;
         else         state_w = S_IDLE;
     end
     S_RECD: begin
-        if (i_stop)                 state_w = S_IDLE;
+        if (i_stop) begin 
+            state_w = S_IDLE;
+            done_w = 1;
+        end
         else if (i_pause)           state_w = S_PAUSE;
         else if (!lr_prev && i_lrc) state_w = S_GET;
         else                        state_w = S_RECD;
     end
     S_GET: begin
         if (bit_counter_r == 16) begin
-            if (i_stop || stopping_r || addr_r == 19'h0000F) state_w = S_IDLE;
+            if (i_stop || stopping_r || addr_r == {20{1'b1}}) begin
+                state_w = S_IDLE;
+                done_w = 1;
+            end
             else if (i_pause || pausing_r)                   state_w = S_PAUSE;
             else                                             state_w = S_RECD;
         end else                                             state_w = S_GET;
     end
     S_PAUSE: begin
-        if (i_start)     state_w = S_RECD;
-        else if (i_stop) state_w = S_IDLE;
+        if (i_stop) begin
+            state_w = S_IDLE;
+            done_w = 1;
+        end
+        else if (i_start) state_w = S_RECD;
         else             state_w = S_PAUSE;
     end
     endcase
@@ -77,8 +88,8 @@ always_comb begin
     end
     S_GET: begin
         if (bit_counter_r == 16) begin
-            if (i_stop || stopping_r || addr_r == 19'h0000F) addr_w = addr_r;
-            else                                             addr_w = addr_r + 1;
+            if (i_stop || stopping_r || addr_r == {20{1'b1}}) addr_w = addr_r;
+            else                                              addr_w = addr_r + 1;
             bit_counter_w = 0;
             data_w        = data_r;
         end
@@ -102,6 +113,7 @@ always_ff @(posedge i_clk or negedge i_rst_n) begin
         bit_counter_r <= 0;
         pausing_r     <= 0;
         stopping_r    <= 0;
+        done_r        <= 0;
 	end
 	else begin
         state_r       <= state_w;
@@ -111,6 +123,7 @@ always_ff @(posedge i_clk or negedge i_rst_n) begin
         bit_counter_r <= bit_counter_w;
         pausing_r     <= pausing_w;
         stopping_r    <= stopping_w;
+        done_r        <= done_w;
 	end
 end
 
