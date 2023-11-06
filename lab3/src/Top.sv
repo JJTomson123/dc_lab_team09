@@ -18,19 +18,13 @@ module Top (
     output        o_SRAM_LB_N,
     output        o_SRAM_UB_N, */
 
-
     // SDRAM
-	output [12:0] o_DRAM_ADDR,
-	output [1:0]  o_DRAM_BA, 
-	output        o_DRAM_CAS_N, //
-	output        o_DRAM_CKE, //
-	output        o_DRAM_CLK,  //
-	output        o_DRAM_CS_N, //
-	inout [31:0]  io_DRAM_DQ, 
-	output [3:0]  o_DRAM_DQM, //
-	output        o_DRAM_RAS_N, //
-	output 		  o_DRAM_WE_N, //
-
+    input  [25:0] i_SDRAM_DATA,
+    input         i_SDRAM_VALID,
+    output        o_SDRAM_WRITE,
+    output        o_SDRAM_READ,
+    output [25:0] o_SDRAM_ADDR,
+    output [15:0] o_SDRAM_DQ,
     
     // I2C
     input  i_clk_100k,
@@ -74,7 +68,8 @@ parameter S_PLAY_PAUSE = 5;
 logic i2c_oen;
 wire i2c_sdat;
 logic [25:0] addr_record, addr_play, addr_SDC;
-logic [15:0] data_record, data_play, dac_data;
+logic [15:0] dac_data;
+/* logic [15:0] data_record, data_play; */
 logic done_play, done_record;
 
 logic dsp_fast, dsp_slow0, dsp_slow1;
@@ -84,11 +79,10 @@ logic [2:0]  speed_r, speed_w;
 logic play_st, rec_st, play_en;
 logic [25:0] addr_end_w, addr_end_r;
 logic [2:0] state_r, state_w;
-logic dram_write, dram_read, dram_rdy;
 
 assign io_I2C_SDAT = (i2c_oen) ? i2c_sdat : 1'bz;
 
-assign addr_SDC = (state_r == S_RECD) ? addr_record : addr_play;
+assign o_SDRAM_ADDR = (state_r == S_RECD) ? addr_record : addr_play;
 /* assign io_SRAM_DQ  = (state_r == S_RECD) ? data_record : 16'dz; // sram_dq as output
 assign data_play   = (state_r != S_RECD) ? io_SRAM_DQ : 16'd0; // sram_dq as input */
 
@@ -106,10 +100,7 @@ assign o_SRAM_OE_N = 1'b0;
 assign o_SRAM_LB_N = 1'b0;
 assign o_SRAM_UB_N = 1'b0; */
 
-assign o_state = {1'b0,state_r[2:0]};
-
-// below is a simple example for module division
-// you can design these as you like
+assign o_state = {1'b0, state_r[2:0]};
 
 // === I2cInitializer ===
 // sequentially sent out settings to initialize WM8731 with I2C protocal
@@ -138,9 +129,9 @@ AudDSP dsp0(
     .i_slow_1(dsp_slow1), // linear interpolation
     .i_addr_end(addr_end_r),
     .i_daclrck(i_AUD_DACLRCK),
-    .i_sram_data(data_play),
-    .i_dram_rdy(dram_rdy),
-    .o_dram_read(dram_read),
+    .i_sram_data(i_SDRAM_DATA),
+    .i_data_valid(i_SDRAM_VALID),
+    .o_dram_read(o_SDRAM_READ),
     .o_dac_data(dac_data),
     .o_sram_addr(addr_play),
     .o_done(done_play)
@@ -167,33 +158,10 @@ AudRecorder recorder0(
     .i_pause(rec_st),
     .i_stop(i_key_1),
     .i_data(i_AUD_ADCDAT),
-    .o_dram_write(dram_write),
+    .o_dram_write(o_SDRAM_WRITE),
     .o_address(addr_record),
-    .o_data(data_record),
+    .o_data(o_SDRAM_DQ),
     .o_done(done_record)
-);
-
-// === SDRAMControl ===
-// write / read data to SDRAM
-SDRAMControl sdram0(
-    .i_rst_n(i_rst_n), 
-    .i_clk(i_clk),
-    .i_addr(addr_SDC),
-    .i_data(data_record),
-    .o_data(data_play),
-    .i_write(dram_write),
-    .i_read(dram_read),
-    .o_rdy(dram_rdy),
-	.o_DRAM_ADDR(o_DRAM_ADDR),
-	.o_DRAM_BA(o_DRAM_BA),
-	.o_DRAM_CAS_N(o_DRAM_CAS_N),
-	.o_DRAM_CKE(o_DRAM_CKE),
-	.o_DRAM_CLK(o_DRAM_CLK),
-	.o_DRAM_CS_N(o_DRAM_CS_N),
-	.io_DRAM_DQ(io_DRAM_DQ),
-	.o_DRAM_DQM(o_DRAM_DQM),
-	.o_DRAM_RAS_N(o_DRAM_RAS_N),
-	.o_DRAM_WE_N(o_DRAM_WE_N)
 );
 
 always_comb begin

@@ -18,7 +18,7 @@ module AudDSP #(
     inout i_daclrck,
     
     input signed [15:0] i_sram_data,
-    input i_dram_rdy,
+    input i_data_valid,
 
     output o_dram_read,
     output [15:0] o_dac_data,
@@ -66,7 +66,7 @@ always_comb begin
         else                              state_w = S_PLAY;
     end
     S_CALC: begin
-        if (!i_dram_rdy)  state_w = S_CALC;
+        if (!i_data_valid)  state_w = S_CALC;
         else if (i_stop || addr_r >= i_addr_end) begin
             state_w = S_IDLE;
             done_w = 1;
@@ -122,7 +122,7 @@ always_comb begin
         data_w = data_r;
         addr_w = addr_r;
 
-        if (i_dram_rdy) begin
+        if (i_data_valid) begin
             data_nxt_w = i_sram_data;
 
             if (counter_r == 0) begin
@@ -137,7 +137,7 @@ always_comb begin
         else begin
             data_nxt_w = data_nxt_r;
             del_data_w = del_data_r;
-            counter_w = counter_r;
+            counter_w  = counter_r;
         end
     end
     S_PAUSE: begin

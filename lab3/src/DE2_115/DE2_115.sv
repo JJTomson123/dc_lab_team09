@@ -139,15 +139,33 @@ module DE2_115 (
 logic key0down, key1down, key2down;
 logic CLK_12M, CLK_100K, CLK_800K;
 logic [3:0] seven;
+logic SDRMCTRL_WRITE, SDRMCTRL_READ, SDRMCTRL_VALID;
+logic [15:0] SDRMCTRL_READDATA, SDRMCTRL_WRITEDATA;
+logic [25:0] SDRMCTRL_ADDR;
 
 assign AUD_XCK = CLK_12M;
 
-Altpll pll0( // generate with qsys, please follow lab2 tutorials
+Lab3_qsys qsys0( // generate with qsys, please follow lab2 tutorials
 	.clk_clk(CLOCK_50),
 	.reset_reset_n(KEY[3]),
 	.altpll_12m_clk(CLK_12M),
 	.altpll_100k_clk(CLK_100K),
-	.altpll_800k_clk(CLK_800K)
+	.altpll_800k_clk(CLK_800K),
+	.sdrmctrl_addr(DRAM_ADDR),   //    sdrmctrl.addr
+	.sdrmctrl_ba(DRAM_BA),       //            .ba
+	.sdrmctrl_cas_n(DRAM_CAS_N), //            .cas_n
+	.sdrmctrl_cke(DRAM_CKE),     //            .cke
+	.sdrmctrl_cs_n(DRAM_CS_N),   //            .cs_n
+	.sdrmctrl_dq(DRAM_DQ),       //            .dq
+	.sdrmctrl_dqm(DRAM_DQM),     //            .dqm
+	.sdrmctrl_ras_n(DRAM_RAS_N), //            .ras_n
+	.sdrmctrl_we_n(DRAM_WE_N),   //            .we_n
+	.sdrmwrapper_i_write(SDRMCTRL_WRITE),    // sdrmwrapper.i_write
+	.sdrmwrapper_i_read(SDRMCTRL_READ),      //            .i_read
+	.sdrmwrapper_o_data(SDRMCTRL_READDATA),  //            .o_data
+	.sdrmwrapper_i_addr(SDRMCTRL_ADDR),      //            .i_addr
+	.sdrmwrapper_i_data(SDRMCTRL_WRITEDATA), //            .i_data
+	.sdrmwrapper_o_valid(SDRMCTRL_VALID)
 );
 
 // you can decide key down settings on your own, below is just an example
@@ -192,21 +210,14 @@ Top top0(
 	.o_SRAM_LB_N(SRAM_LB_N),
 	.o_SRAM_UB_N(SRAM_UB_N), */
 
-
-
 	// SDRAM
-	.o_DRAM_ADDR(DRAM_ADDR),
-	.o_DRAM_BA(DRAM_BA),
-	.o_DRAM_CAS_N(DRAM_CAS_N),
-	.o_DRAM_CKE(DRAM_CKE),
-	.o_DRAM_CLK(DRAM_CLK),
-	.o_DRAM_CS_N(DRAM_CS_N),
-	.io_DRAM_DQ(DRAM_DQ),
-	.o_DRAM_DQM(DRAM_DQM),
-	.o_DRAM_RAS_N(DRAM_RAS_N),
-	.o_DRAM_WE_N(DRAM_WE_N),
+	.i_SDRAM_DATA(SDRMCTRL_READDATA),
+    .i_SDRAM_VALID(SDRMCTRL_VALID),
+    .o_SDRAM_WRITE(SDRMCTRL_WRITE),
+    .o_SDRAM_READ(SDRMCTRL_READ),
+    .o_SDRAM_ADDR(SDRMCTRL_ADDR),
+    .o_SDRAM_DQ(SDRMCTRL_WRITEDATA),
 
-	
 	// I2C
 	.i_clk_100k(CLK_100K),
 	.o_I2C_SCLK(I2C_SCLK),
