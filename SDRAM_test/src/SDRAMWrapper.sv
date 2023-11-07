@@ -34,7 +34,7 @@ logic        read_r, read_w, write_r, write_w;
 assign o_data  = data_r;
 assign o_valid = avm_readdatavalid;
 
-assign avm_address      = addr_r[24:0];
+assign avm_address      = addr_r[25:1];
 assign avm_byteenable_n = (addr_r[0]) ? 4'b0011 : 4'b1100;
 assign avm_chipselect   = 1'b1;
 assign avm_writedata    = (addr_r[0]) ? {data_r, 16'b0} : {16'b0, data_r};
