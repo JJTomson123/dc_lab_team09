@@ -151,6 +151,7 @@ Lab3_qsys qsys0( // generate with qsys, please follow lab2 tutorials
 	.altpll_12m_clk(CLK_12M),
 	.altpll_100k_clk(CLK_100K),
 	.altpll_800k_clk(CLK_800K),
+	.sdrmclk_clk(DRAM_CLK),
 	.sdrmctrl_addr(DRAM_ADDR),   //    sdrmctrl.addr
 	.sdrmctrl_ba(DRAM_BA),       //            .ba
 	.sdrmctrl_cas_n(DRAM_CAS_N), //            .cas_n
