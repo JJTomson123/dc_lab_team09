@@ -131,8 +131,8 @@ always_comb begin
         S_ADD : state_w = S_STORE;
         S_SUB : state_w = S_STORE;
         S_STORE: begin
-            if (~|varsize_r) state_w = data_r[WRDBW] ? S_CARRY : S_IDLE;
-            else             state_w = varsize_r[VARBW] ? S_IDLE : S_LOAD;
+            if (varsize_r <= WRDBW) state_w = S_CARRY;
+            else                    state_w = S_IDLE;
         end
         S_CARRY: state_w = S_IDLE;
         default: state_w = S_IDLE;
@@ -174,9 +174,19 @@ always_comb begin
             x3_addr_w = x3_addr_r;
         end
         S_STORE: begin
-            varsize_w = varsize_r;
-            data_w    = data_r >> WRDBW;
-            addr_w    = (state_w == S_CARRY) ? (x3_addr_r + WRDBW) : x1_addr_r;
+            varsize_w = varsize_r - WRDBW;
+            if (varsize_r == WRDBW) begin
+                data_w = (~data_r) >> WRDBW;
+                addr_w = x3_addr_r + WRDBW;
+            end
+            else if (varsize_r < WRDBW) begin
+                data_w = data_r ^ {{WRDBW{1'b0}}, 1'b1} << WRDBW;
+                addr_w = addr_r;
+            end
+            else begin
+                data_w = data_r >> WRDBW;
+                addr_w = x1_addr_r;
+            end
             x1_addr_w = x1_addr_r;
             x2_addr_w = x2_addr_r;
             x3_addr_w = x3_addr_r + WRDBW;
