@@ -8,13 +8,14 @@ localparam HCLK = CLK/2;
 logic clk, valid, done, rst_n, enable;
 initial clk = 0;
 always #HCLK clk = ~clk;
-logic [16:0] varsize;
+logic [16:0] varsize_x1, varsize_x2;
 logic [19:0] x1addr, x2addr, x3addr, addr;
 logic [15:0] rdata, wdata;
-logic [15:0] sram [0:15];
+logic [15:0] sram [0:16];
 
 initial begin
-	varsize = 17'd32;
+	varsize_x1 = 17'd32;
+    varsize_x2 = 17'd32;
 	x1addr = 19'd0;
 	x2addr = 19'd5;
 	x3addr = 19'd10;
@@ -27,20 +28,20 @@ end
 
 assign rdata = sram[addr];
 
-AdderUnit  #(
+MultUnit  #(
 	.ADRBW(20),
 	.WRDBW(16),
 	.VARBW(17)
-) adder123 (
+) multer1 (
 	.i_clk(clk),
 	.i_rst_n(rst_n),
 	.i_valid(valid),
-	.i_varsize(varsize),
+	.i_varsize_x1(varsize_x1),
+    .i_varsize_x2(varsize_x2),
 	.i_x1addr(x1addr),
 	.i_x2addr(x2addr),
 	.i_x3addr(x3addr),
 	.i_rdata(rdata),
-	.i_sub(1'b1),
 	.o_wen(enable),
 	.o_addr(addr),
 	.o_wdata(wdata),
