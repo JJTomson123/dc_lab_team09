@@ -1,4 +1,8 @@
-module Top (
+module Top #(
+    parameter ADRBW = 20,
+    parameter WRDBW = 16,
+    parameter VARBW = 17
+) (
     input         i_rst_n,
     input         i_clk,
 
@@ -118,13 +122,17 @@ always_comb begin
             endcase
         end
         S_PREP1: begin
-            case (inst_r[7:4])
+            case (inst_r)
                 ADD, SUB: state_w = S_ADD;
                 MUL     : state_w = S_MUL;
                 default : state_w = S_INST;
             endcase
         end
-        default: 
+        S_ADD  : state_w = add_done ? S_INST : S_ADD;
+        S_MUL  : state_w = mul_done ? S_INST : S_MUL;
+        S_LOAD : state_w = (counter_r == 2 && varsize_r <= WRDBW) ? S_INST : S_LOAD;
+        S_STORE: state_w = (counter_r == 2 && varsize_r <= WRDBW) ? S_INST : S_STORE;
+        default: state_w = S_INST;
     endcase
 end
 
@@ -137,47 +145,11 @@ always_comb begin
 end
 
 always_comb begin
-    // design your control here
-    case(state_r)
-    S_IDLE: begin
-        arith_start_w = 0;
-        if (i_valid) begin
-            state_w = S_PREP;
-            prep_start = 1;
-        end 
-        else begin
-            state_w = S_IDLE;
-            prep_start = 0;
-        end
-    end
-    S_PREP: begin
-        prep_start = 0;
-        if (prep_rdy && !prep_start) begin
-            state_w       = S_ARITH;
-            arith_start_w = 1;
-        end
-        else begin
-            state_w = S_PREP;
-            arith_start_w = 0;
-        end
-    end
-    S_ARITH: begin
-        prep_start = 0;
-        arith_start_w = 0;
-        if (prep_rdy && !prep_start) begin
-            state_w       = S_CALC;
-        end
-        else begin
-            state_w       = S_ARITH;
-        end
-    end
-    default: state_w = S_IDLE;
-    endcase
 end
 
 always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
-        state_r <= S_IDLE;
+        state_r <= S_INST;
 
     end
     else begin
@@ -239,12 +211,13 @@ always_comb begin
         S_SUB : state_w = S_STORE;
         S_STORE: begin
             if (is_sub_r) begin
-                if (~|varsize_r || varsize_r[VARBW]) state_w = S_IDLE;
-                else                                 state_w = S_LOAD;
+                if (varsize_r <= WRDBW) state_w = S_IDLE;
+                else                    state_w = S_LOAD;
             end
             else begin
-                if (~|varsize_r) state_w = data_r[WRDBW] ? S_CARRY : S_IDLE;
-                else             state_w = varsize_r[VARBW] ? S_IDLE : S_LOAD;
+                if (varsize_r == WRDBW)     state_w = data_r[WRDBW] ? S_CARRY : S_IDLE;
+                else if (varsize_r < WRDBW) state_w = S_IDLE;
+                else                        state_w = S_LOAD;
             end
         end
         S_CARRY: state_w = S_IDLE;
@@ -263,7 +236,7 @@ always_comb begin
             x3_addr_w = i_x3addr;
         end
         S_LOAD: begin
-            varsize_w = varsize_r - WRDBW;
+            varsize_w = varsize_r;
             data_w    = i_rdata + data_r;
             addr_w    = x2_addr_r;
             x1_addr_w = x1_addr_r + 1;
@@ -287,7 +260,7 @@ always_comb begin
             x3_addr_w = x3_addr_r;
         end
         S_STORE: begin
-            varsize_w = varsize_r;
+            varsize_w = varsize_r - WRDBW;
             data_w    = data_r >> WRDBW;
             addr_w    = (state_w == S_CARRY) ? (x3_addr_r + 1) : x1_addr_r;
             x1_addr_w = x1_addr_r;
@@ -306,8 +279,8 @@ always_comb begin
 end
 
 always_comb begin
-    if (state_r == S_STORE && varsize_r) nxtaddr_w = i_varsize + data_r[varsize_r];
-    else                    nxtaddr_w = nxtaddr_r;
+    if (state_r == S_STORE && varsize_r <= VARBW) size3_w = i_varsize + data_r[varsize_r];
+    else                                          size3_w = i_varsize;
 end
 
 always_ff @(posedge i_clk or negedge i_rst_n) begin
@@ -320,7 +293,7 @@ always_ff @(posedge i_clk or negedge i_rst_n) begin
         x3_addr_r <= 0;
         addr_r <= 0;
         is_sub_r <= 0;
-        nxtaddr_r <= 0;
+        size3_r <= 0;
     end
     else begin
         state_r <= state_w;
@@ -331,7 +304,7 @@ always_ff @(posedge i_clk or negedge i_rst_n) begin
         x3_addr_r <= x3_addr_w;
         addr_r <= addr_w;
         is_sub_r <= is_sub_w;
-        nxtaddr_r <= nxtaddr_w;
+        size3_r <= size3_w;
     end
 end
 
