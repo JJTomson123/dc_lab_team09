@@ -32,6 +32,9 @@ localparam S_ADD   = 5;
 localparam S_MUL   = 7;
 localparam S_PREP1 = 8;
 localparam S_PREP2 = 9;
+localparam S_PREP3 = 10;
+localparam S_PREP4 = 11;
+localparam S_PREP5 = 12;
 
 localparam ADD   = 4'b0000;
 localparam SUB   = 4'b0001;
@@ -46,21 +49,28 @@ localparam STATUS_BASE = 2*4;
 localparam TX_OK_BIT   = 6;
 localparam RX_OK_BIT   = 7;
 
-logic [2:0] state_r, state_w;
+logic [3:0] state_r, state_w;
 logic [1:0] counter_r, counter_w;
 logic [19:0] var_addr_r, var_addr_w;
 logic [19:0] SRAM_addr, add_addr, mul_addr;
 logic [19:0] top_addr_r, top_addr_w;
 logic [15:0] top_wdata_r, top_wdata_w;
-logic        add_valid, add_sub, mul_valid;
+logic        add_valid_w, mul_valid_w, add_sub, mul_valid_r, add_valid_r;
 logic [16:0] varsize_x1_r, varsize_x1_w, varsize_x2_r, varsize_x2_w, varsize_r, varsize_w;
 logic [19:0] x1_addr_r, x1_addr_w, x2_addr_r, x2_addr_w, x3_addr_r, x3_addr_w;
 logic        SRAM_wen, add_wen, mul_wen, add_done, mul_done;
 logic [15:0] SRAM_wdata, add_wdata, mul_wdata, SRAM_rdata;
 logic [4:0] rs_addr_r, rs_addr_w;
 logic [3:0] inst_r, inst_w, x1_r, x1_w, x2_r, x2_w, x3_r, x3_w;
+logic avm_read_r, avm_read_w, avm_write_r, avm_write_w;
+logic [15:0] rs_wdata;
+logic nxt_addr_r, mxt_addr_w;
 
 assign avm_address = rs_addr_r;
+assign avm_read = avm_read_r;
+assign avm_write = avm_write_r;
+assign avm_writedata = {24'b0, rs_wdata[7:0]};
+
 assign o_SRAM_ADDR = SRAM_addr;
 assign io_SRAM_DQ  = (state_r == S_ADD) ? add_wdata : (state_r == S_MUL) ? mul_wdata : (state_r == S_STORE) ? SRAM_wdata : 16'dz; // sram_dq as output
 assign SRAM_rdata  = io_SRAM_DQ; // sram_dq as input
@@ -70,6 +80,8 @@ assign o_SRAM_OE_N = 1'b0;
 assign o_SRAM_LB_N = 1'b0;
 assign o_SRAM_UB_N = 1'b0;
 
+assign add_sub = (inst_r==SUB);
+
 AdderUnit  #(
 	.ADRBW(20),
 	.WRDBW(16),
@@ -77,7 +89,7 @@ AdderUnit  #(
 ) adder0 (
 	.i_clk(i_clk),
 	.i_rst_n(i_rst_n),
-	.i_valid(add_valid),
+	.i_valid(add_valid_r),
 	.i_varsize(varsize_r),
 	.i_x1addr(x1_addr_r),
 	.i_x2addr(x2_addr_r),
@@ -97,7 +109,7 @@ MultUnit  #(
 ) multer0 (
 	.i_clk(i_clk),
 	.i_rst_n(i_rst_n),
-	.i_valid(mul_valid),
+	.i_valid(mul_valid_r),
 	.i_varsize_x1(varsize_x1_r),
     .i_varsize_x2(varsize_x2_r),
 	.i_x1addr(x1_addr_r),
@@ -110,6 +122,8 @@ MultUnit  #(
 	.o_done(mul_done)
 );
 
+
+
 always_comb begin
     case (state_r)
         S_INST: begin
@@ -121,7 +135,11 @@ always_comb begin
                 default           : state_w = S_INST;
             endcase
         end
-        S_PREP1: begin
+        S_PREP1: state_w = S_PREP2;
+        S_PREP2: state_w = S_PREP3;
+        S_PREP3: state_w = S_PREP4;
+        S_PREP4: state_w = S_PREP5;
+        S_PREP5: begin
             case (inst_r)
                 ADD, SUB: state_w = S_ADD;
                 MUL     : state_w = S_MUL;
@@ -138,23 +156,102 @@ end
 
 always_comb begin
     case (state_r)
-        S_ADD  : SRAM_addr = add_addr;
-        S_MUL  : SRAM_addr = mul_addr;
-        default: SRAM_addr = top_addr_r;
+        S_INST : begin
+            if (avm_waitrequest) begin
+                rs_addr_w = rs_addr_r;
+                avm_read_w = 1'b1;
+                avm_write_w = 1'b0;
+            end
+            else if (rs_addr_r == STATUS_BASE) begin
+                rs_addr_w = avm_readdata[RX_OK_BIT] ? RX_BASE : STATUS_BASE;
+                avm_read_w = 1'b1;
+                avm_write_w = 1'b0;
+            end
+            else begin
+                
+            end
+            x3_addr_w = nxt_addr_r;
+            top_addr_w = (x3_r << 2) + 20'hfffc0;
+            SRAM_wen  = 1'b0;
+            SRAM_wdata = nxt_addr_r;
+        end
+        S_PREP1: begin
+            top_addr_w = (x1_r << 2) + 20'hfffc0;
+        end
+        S_PREP2: begin
+            x1_addr_w = SRAM_rdata;
+            top_addr_w = top_addr_r + 2;
+        end
+        S_PREP3: begin
+            varsize_x1_w = SRAM_rdata;
+            top_addr_w = 4*x2_r + 20'hfffc0;
+        end
+        S_PREP4: begin
+            x2_addr_w = SRAM_rdata;
+            top_addr_w = top_addr_r + 2;
+        end
+        S_PREP5: begin
+            varsize_x2_w = SRAM_rdata;
+            varsize_w = (varsize_x1_r >= varsize_x2_r) ? varsize_x1_r : varsize_x2_r;
+            case (inst_r)
+                ADD     : add_valid_w = 1;
+                SUB     : add_valid_w = 1;
+                MUL     : mul_valid_w = 1;
+            endcase
+        end
+        S_ADD  : begin
+            add_valid_w = 0;
+            SRAM_addr = add_addr;
+            SRAM_wen  = add_wen;
+        end
+        S_MUL  : begin
+            mul_valid_w = 0;
+            SRAM_addr = mul_addr;
+            SRAM_wen  = mul_wen;
+        end
     endcase
-end
-
-always_comb begin
 end
 
 always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
-        state_r <= S_INST;
-
+        state_r       <= S_INST;
+        counter_r     <= 0;
+        var_addr_r    <= 0;
+        x1_addr_r     <= 0;
+        x2_addr_r     <= 0;
+        x3_addr_r     <= 0;
+        varsize_r     <= 0;
+        varsize_x1_r  <= 0;
+        varsize_x2_r  <= 0;
+        top_addr_r    <= 0;
+        top_wdata_r   <= 0;
+        rs_addr_r     <= STATUS_BASE;
+        inst_r        <= 0;
+        x1_r          <= 0;
+        x2_r          <= 0;
+        x3_r          <= 0;
+        avm_read_r    <= 0;
+        avm_write_r   <= 0;
     end
     else begin
-        state_r <= state_w;
-
+        state_r       <= state_w;
+        counter_r     <= counter_w;
+        var_addr_r    <= var_addr_w;
+        x1_addr_r     <= x1_addr_w;
+        x2_addr_r     <= x2_addr_w;
+        x3_addr_r     <= x3_addr_w;
+        varsize_r     <= varsize_w;
+        varsize_x1_r  <= varsize_x1_w;
+        varsize_x2_r  <= varsize_x2_w;
+        top_addr_r    <= top_addr_w;
+        top_wdata_r   <= top_wdata_w;
+        rs_addr_r     <= rs_addr_w;
+        inst_r        <= inst_w;
+        x1_r          <= x1_w;
+        x2_r          <= x2_w;
+        x3_r          <= x3_w;
+        avm_read_r    <= avm_read_w;
+        avm_write_r   <= avm_write_w;
     end
 end
 
