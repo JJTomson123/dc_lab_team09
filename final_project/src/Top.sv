@@ -473,13 +473,12 @@ always_comb begin
         S_SUB : state_w = S_STORE;
         S_STORE: begin
             if (is_sub_r) begin
-                if (varsize_r <= WRDBW) state_w = S_IDLE;
-                else                    state_w = S_LOAD;
+                if (varsize_r == 1) state_w = S_IDLE;
+            else                    state_w = S_LOAD;
             end
             else begin
-                if (varsize_r == WRDBW)     state_w = data_r[WRDBW] ? S_CARRY : S_IDLE;
-                else if (varsize_r < WRDBW) state_w = S_IDLE;
-                else                        state_w = S_LOAD;
+                if (varsize_r == 1) state_w = data_r[WRDBW] ? S_CARRY : S_IDLE;
+                else                state_w = S_LOAD;
             end
         end
         S_CARRY: state_w = S_IDLE;
@@ -553,9 +552,11 @@ always_comb begin
 end
 
 always_comb begin
-    if (state_r == S_IDLE && i_valid)             size3_w = varsize_w;
-    if (state_r == S_STORE && varsize_r <= VARBW) size3_w = size3_r + data_r[varsize_r];
-    else                                          size3_w = size3_r;
+    case (state_r)
+        S_IDLE:  size3_w = i_valid ? varsize_w : size3_r;
+        S_CARRY: size3_w = size3_r + 1'b1;
+        default: size3_w = size3_r;
+    endcase
 end
 
 always_ff @(posedge i_clk or negedge i_rst_n) begin

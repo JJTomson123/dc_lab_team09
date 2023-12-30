@@ -1,0 +1,4 @@
+store 0 4
+store 1 3
+load 1
+load 0
