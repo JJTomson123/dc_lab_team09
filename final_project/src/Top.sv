@@ -53,13 +53,13 @@ localparam RX_OK_BIT   = 7;
 
 logic [3:0] state_r, state_w;
 logic [1:0] counter_r, counter_w;
+logic [19:0] var_addr_r[0:15], var_addr_w[0:15]; // head address of each variable
+logic [15:0] var_size_r[0:15], var_size_w[0:15]; // number of words per variable
 logic [19:0] SRAM_addr, add_addr, mul_addr;
 logic [19:0] top_addr_r, top_addr_w;
 logic [15:0] top_wdata_r, top_wdata_w;
 logic        top_wen_r, top_wen_w;
 logic        add_valid_w, mul_valid_w, add_sub, mul_valid_r, add_valid_r;
-logic [19:0] var_addr_r[0:15], var_addr_w[0:15]; // head address of each variable
-logic [15:0] var_size_r[0:15], var_size_w[0:15]; // number of words per variable
 logic [15:0] load_size_w, load_size_r;
 logic        SRAM_wen, add_wen, mul_wen, add_done, mul_done;
 logic [15:0] SRAM_wdata, add_wdata, mul_wdata, SRAM_rdata;
@@ -198,7 +198,22 @@ always_comb begin
 end
 
 always_comb begin
-    top_wen_w = 1'b0;
+    counter_w   = counter_r;
+    top_addr_w  = top_addr_r;
+    top_wdata_w = top_wdata_r;
+    top_wen_w   = 1'b0;
+    add_valid_w = 1'b0;
+    mul_valid_w = 1'b0;
+    load_size_w = load_size_r;
+    rs_addr_w   = rs_addr_r;
+    inst_w      = inst_r;
+    x1_w        = x1_r;
+    x2_w        = x2_r;
+    x3_w        = x3_r;
+    avm_read_w  = 1'b0;
+    avm_write_w = 1'b0;
+    rs_wdata_w  = rs_wdata_r;
+    nxt_addr_w  = nxt_addr_r;
     SRAM_addr = top_addr_r;
     SRAM_wen  = top_wen_r;
     for (i_comb = 5'd0; i_comb < 5'd16; i_comb++) begin
@@ -210,19 +225,16 @@ always_comb begin
             if (avm_waitrequest || !avm_readdata[RX_OK_BIT]) begin
                 rs_addr_w   = STATUS_BASE;
                 avm_read_w  = 1'b1;
-                avm_write_w = 1'b0;
             end
             else begin
                 rs_addr_w   = RX_BASE;
                 avm_read_w  = 1'b1;
-                avm_write_w = 1'b0;
             end
         end
         S_INST : begin
             if (avm_waitrequest) begin
                 rs_addr_w   = RX_BASE;
                 avm_read_w  = 1'b1;
-                avm_write_w = 1'b0;
             end
             else begin
                 {inst_w, x3_w} = avm_readdata[7:0];
@@ -239,7 +251,6 @@ always_comb begin
             if (avm_waitrequest) begin
                 rs_addr_w   = RX_BASE;
                 avm_read_w  = 1'b1;
-                avm_write_w = 1'b0;
             end
             else begin
                 {x1_w, x2_w} = avm_readdata[7:0];
@@ -264,7 +275,6 @@ always_comb begin
             if (avm_waitrequest) begin
                 rs_addr_w   = RX_BASE;
                 avm_read_w  = 1'b1;
-                avm_write_w = 1'b0;
             end
             else begin
                 var_size_w[x3_r] = {avm_readdata[7:0], var_size_r[x3_r][15:7]};
@@ -277,13 +287,11 @@ always_comb begin
             if (avm_waitrequest) begin
                 rs_addr_w   = RX_BASE;
                 avm_read_w  = 1'b1;
-                avm_write_w = 1'b0;
             end
             else begin
                 top_wdata_w = {avm_readdata[7:0], top_wdata_r[15:7]};
                 top_addr_w  = nxt_addr_r;
                 if (counter_r == 0) begin
-                    top_wen_w = 1'b0;
                     counter_w = 1;
                     load_size_w = load_size_r;
                     nxt_addr_w  = nxt_addr_r;
@@ -300,11 +308,9 @@ always_comb begin
             if (avm_waitrequest || !avm_readdata[TX_OK_BIT]) begin
                 rs_addr_w   = STATUS_BASE;
                 avm_read_w  = 1'b1;
-                avm_write_w = 1'b0;
             end
             else begin
                 rs_addr_w   = TX_BASE;
-                avm_read_w  = 1'b0;
                 avm_write_w = 1'b1;
                 rs_wdata_w  = load_size_r[(counter_r)<<3 +: 8];
             end
@@ -312,21 +318,18 @@ always_comb begin
         S_TXSZ : begin
             if (avm_waitrequest) begin
                 rs_addr_w   = TX_BASE;
-                avm_read_w  = 1'b0;
                 avm_write_w = 1'b1;
                 rs_wdata_w  = load_size_r[(counter_r)<<3 +: 8];
             end
             else begin
                 rs_addr_w   = STATUS_BASE;
                 avm_read_w  = 1'b1;
-                avm_write_w = 1'b0;
                 counter_w   = (counter_r == 1) ? 0 : counter_w + 1;
             end
         end
         S_TXDT : begin
             if (avm_waitrequest) begin
                 rs_addr_w   = TX_BASE;
-                avm_read_w  = 1'b0;
                 avm_write_w = 1'b1;
                 rs_wdata_w  = SRAM_rdata[(counter_r)<<3 +: 8];
             end
@@ -356,6 +359,10 @@ always_ff @(posedge i_clk or negedge i_rst_n) begin
         end
         top_addr_r    <= 0;
         top_wdata_r   <= 0;
+        top_wen_r     <= 0;
+        add_valid_r   <= 0;
+        mul_valid_r   <= 0;
+        load_size_r   <= 0;
         rs_addr_r     <= STATUS_BASE;
         inst_r        <= 0;
         x1_r          <= 0;
@@ -363,6 +370,8 @@ always_ff @(posedge i_clk or negedge i_rst_n) begin
         x3_r          <= 0;
         avm_read_r    <= 0;
         avm_write_r   <= 0;
+        rs_wdata_r    <= 0;
+        nxt_addr_r    <= 0;
     end
     else begin
         state_r       <= state_w;
@@ -373,6 +382,10 @@ always_ff @(posedge i_clk or negedge i_rst_n) begin
         end
         top_addr_r    <= top_addr_w;
         top_wdata_r   <= top_wdata_w;
+        top_wen_r     <= top_wen_w;
+        add_valid_r   <= add_valid_w;
+        mul_valid_r   <= mul_valid_w;
+        load_size_r   <= load_size_w;
         rs_addr_r     <= rs_addr_w;
         inst_r        <= inst_w;
         x1_r          <= x1_w;
@@ -380,6 +393,8 @@ always_ff @(posedge i_clk or negedge i_rst_n) begin
         x3_r          <= x3_w;
         avm_read_r    <= avm_read_w;
         avm_write_r   <= avm_write_w;
+        rs_wdata_r    <= rs_wdata_w;
+        nxt_addr_r    <= nxt_addr_w;
     end
 end
 

@@ -136,108 +136,23 @@ module DE2_115 (
 	inout [6:0] EX_IO
 );
 
-logic key0down, key1down, key2down;
-logic CLK_12M, CLK_100K, CLK_800K;
-logic [3:0] seven;
-
-assign AUD_XCK = CLK_12M;
-
-Altpll pll0( // generate with qsys, please follow lab2 tutorials
-	.clk_clk(CLOCK_50),
-	.reset_reset_n(KEY[3]),
-	.altpll_12m_clk(CLK_12M),
-	.altpll_100k_clk(CLK_100K),
-	.altpll_800k_clk(CLK_800K)
+top_qsys top_qsys0(
+	.clk_clk(CLOCK_50),                        //                        clk.clk
+	.reset_reset_n(KEY[0]),                    //                      reset.reset_n
+	.top_0_sram_io_dq(SRAM_DQ),                //              top_0_sram_io.dq
+	.top_0_sram_io_we_n(SRAM_WE_N),            //                           .we_n
+	.top_0_sram_io_ce_n(SRAM_CE_N),            //                           .ce_n
+	.top_0_sram_io_oe_n(SRAM_OE_N),            //                           .oe_n
+	.top_0_sram_io_lb_n(SRAM_LB_N),            //                           .lb_n
+	.top_0_sram_io_ub_n(SRAM_UB_N),            //                           .ub_n
+	.top_0_sram_io_addr(SRAM_ADDR),            //                           .addr
+	.uart_0_external_connection_rxd(UART_RXD), // uart_0_external_connection.rxd
+	.uart_0_external_connection_txd(UART_TXD)  //                           .txd
 );
-
-// you can decide key down settings on your own, below is just an example
-Debounce deb0(
-	.i_in(KEY[0]), // rec start/pause
-	.i_rst_n(KEY[3]),
-	.i_clk(CLK_12M),
-	.o_neg(key0down) 
-);
-
-Debounce deb1(
-	.i_in(KEY[1]), // play/rec stop
-	.i_rst_n(KEY[3]),
-	.i_clk(CLK_12M),
-	.o_neg(key1down) 
-);
-
-Debounce deb2(
-	.i_in(KEY[2]), // speed change
-	.i_rst_n(KEY[3]),
-	.i_clk(CLK_12M),
-	.o_neg(key2down) 
-);
-
-Top top0(
-	.i_rst_n(KEY[3]),
-	.i_clk(CLK_12M),
-	.i_play_sel(SW[0]), // play when high, rec when low
-	.i_speed_sel(SW[1]), // accel when high, decel when low
-	.i_inter_sel(SW[2]), // interpol when high
-	.i_key_0(key0down), // play/rec start and pause
-	.i_key_1(key1down), // play/rec stop
-	.i_key_2(key2down), // speed change
-	// .i_speed(SW[3:0]), // design how user can decide mode on your own
-	
-	// AudDSP and SRAM
-	.o_SRAM_ADDR(SRAM_ADDR), // [19:0]
-	.io_SRAM_DQ(SRAM_DQ), // [15:0]
-	.o_SRAM_WE_N(SRAM_WE_N),
-	.o_SRAM_CE_N(SRAM_CE_N),
-	.o_SRAM_OE_N(SRAM_OE_N),
-	.o_SRAM_LB_N(SRAM_LB_N),
-	.o_SRAM_UB_N(SRAM_UB_N),
-	
-	// I2C
-	.i_clk_100k(CLK_100K),
-	.o_I2C_SCLK(I2C_SCLK),
-	.io_I2C_SDAT(I2C_SDAT),
-	
-	// AudPlayer
-	.i_AUD_ADCDAT(AUD_ADCDAT),
-	.i_AUD_ADCLRCK(AUD_ADCLRCK),
-	.i_AUD_BCLK(AUD_BCLK),
-	.i_AUD_DACLRCK(AUD_DACLRCK),
-	.o_AUD_DACDAT(AUD_DACDAT),
-
-	// SEVENDECODER (optional display)
-	.o_state(seven)
-	// .o_record_time(recd_time),
-	// .o_play_time(play_time),
-
-	// LCD (optional display)
-	// .i_clk_800k(CLK_800K),
-	// .o_LCD_DATA(LCD_DATA), // [7:0]
-	// .o_LCD_EN(LCD_EN),
-	// .o_LCD_RS(LCD_RS),
-	// .o_LCD_RW(LCD_RW),
-	// .o_LCD_ON(LCD_ON),
-	// .o_LCD_BLON(LCD_BLON),
-
-	// LED
-	// .o_ledg(LEDG), // [8:0]
-	// .o_ledr(LEDR) // [17:0]
-);
-
-SevenHexDecoder seven_dec0(
-	.i_hex(seven),
-	.o_seven_ten(HEX1),
-	.o_seven_one(HEX0)
-);
-
-// SevenHexDecoder seven_dec1(
-// 	.i_num(recd_time),
-// 	.o_seven_ten(HEX5),
-//  	.o_seven_one(HEX4)
-// );
 
 // comment those are use for display
-/* assign HEX0 = '1;
-assign HEX1 = '1; */
+assign HEX0 = '1;
+assign HEX1 = '1;
 assign HEX2 = '1;
 assign HEX3 = '1;
 assign HEX4 = '1;
