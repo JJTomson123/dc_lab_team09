@@ -1,6 +1,14 @@
 #!/usr/bin/env python
 from serial import Serial, EIGHTBITS, PARITY_NONE, STOPBITS_ONE
 from sys import argv
+import os
+
+def its(array):
+    return "".join(chr(i) for i in array)
+
+def bti(string):
+    return sum(ord(byte) * 16**i for i, byte in enumerate(string))
+
 
 assert len(argv) == 2
 s = Serial(
@@ -23,10 +31,16 @@ int_list = []
 
 
 s.write(i_data)
+print("Instructions written")
 dec = s.read(2)
+print("Variable size received, size = ")
 fp_o_data.write(dec)
+dec = [ord(byte) for byte in dec]
+print(dec)
 var_size = dec[0] + dec[1] * 256
+print(var_size)
 dec = s.read(var_size * 2)
+print("Result received")
 fp_o_data.write(dec)
 
 fp_i_data.close()

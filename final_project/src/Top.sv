@@ -19,7 +19,9 @@ module Top #(
     output        o_SRAM_CE_N,
     output        o_SRAM_OE_N,
     output        o_SRAM_LB_N,
-    output        o_SRAM_UB_N
+    output        o_SRAM_UB_N,
+
+    output [3 :0] o_state
 );
 
 // design the FSM and states as you like
@@ -68,7 +70,7 @@ logic [4:0] rs_addr_r, rs_addr_w;
 logic [3:0] inst_r, inst_w, x1_r, x1_w, x2_r, x2_w, x3_r, x3_w;
 logic avm_read_r, avm_read_w, avm_write_r, avm_write_w;
 logic [15:0] rs_wdata_r, rs_wdata_w;
-logic nxt_addr_r, nxt_addr_w;
+logic [19:0] nxt_addr_r, nxt_addr_w;
 logic [4:0] i_comb, i_ff;
 
 assign avm_address = rs_addr_r;
@@ -86,6 +88,7 @@ assign o_SRAM_CE_N = 1'b0;
 assign o_SRAM_OE_N = 1'b0;
 assign o_SRAM_LB_N = 1'b0;
 assign o_SRAM_UB_N = 1'b0;
+assign o_state     = state_r;
 
 assign add_sub = (inst_r==SUB);
 
@@ -257,6 +260,8 @@ always_comb begin
                 case (inst_r)
                     ADD, SUB: add_valid_w = 1;
                     MUL:      mul_valid_w = 1;
+                    default : begin
+                    end
                 endcase
             end
         end 
@@ -264,12 +269,14 @@ always_comb begin
             SRAM_addr = add_addr;
             SRAM_wen  = add_wen;
             var_size_w[x3_r] = add_done ? add_size3 : var_size_r[x3_r];
+            nxt_addr_w = add_done ? nxt_addr_r + add_size3 : nxt_addr_r;
         end
         S_MUL  : begin
             mul_valid_w = 0;
             SRAM_addr = mul_addr;
             SRAM_wen  = mul_wen;
             var_size_w[x3_r] = mul_done ? mul_size3 : var_size_r[x3_r];
+            nxt_addr_w = mul_done ? nxt_addr_r + mul_size3 : nxt_addr_r;
         end
         S_RXSZ : begin
             if (avm_waitrequest) begin
@@ -277,9 +284,9 @@ always_comb begin
                 avm_read_w  = 1'b1;
             end
             else begin
-                var_size_w[x3_r] = {avm_readdata[7:0], var_size_r[x3_r][15:7]};
-                load_size_w      = {avm_readdata[7:0], var_size_r[x3_r][15:7]};
-                counter_w        = (counter_r == 1) ? 0 : counter_w + 1;
+                var_size_w[x3_r] = {avm_readdata[0+:8], var_size_r[x3_r][8+:8]};
+                load_size_w      = {avm_readdata[0+:8], var_size_r[x3_r][8+:8]};
+                counter_w        = (counter_r == 1) ? 2'd0 : counter_w + 1;
                 nxt_addr_w       = var_addr_r[x3_r];
             end
         end
@@ -289,7 +296,7 @@ always_comb begin
                 avm_read_w  = 1'b1;
             end
             else begin
-                top_wdata_w = {avm_readdata[7:0], top_wdata_r[15:7]};
+                top_wdata_w = {avm_readdata[0+:8], top_wdata_r[8+:8]};
                 top_addr_w  = nxt_addr_r;
                 if (counter_r == 0) begin
                     counter_w = 1;
@@ -298,9 +305,9 @@ always_comb begin
                 end
                 else begin
                     top_wen_w = 1'b1;
-                    counter_w = 0;
-                    load_size_w = load_size_r - 1;
-                    nxt_addr_w  = nxt_addr_r + 1;
+                    counter_w = 2'd0;
+                    load_size_w = load_size_r - 1'b1;
+                    nxt_addr_w  = nxt_addr_r + 1'b1;
                 end
             end
         end
@@ -312,26 +319,37 @@ always_comb begin
             else begin
                 rs_addr_w   = TX_BASE;
                 avm_write_w = 1'b1;
-                rs_wdata_w  = load_size_r[(counter_r)<<3 +: 8];
+                rs_wdata_w  = load_size_r[{counter_r[0], 3'b0} +: 8];
             end
         end
         S_TXSZ : begin
             if (avm_waitrequest) begin
                 rs_addr_w   = TX_BASE;
                 avm_write_w = 1'b1;
-                rs_wdata_w  = load_size_r[(counter_r)<<3 +: 8];
+                rs_wdata_w  = load_size_r[{counter_r[0], 3'b0} +: 8];
             end
             else begin
                 rs_addr_w   = STATUS_BASE;
                 avm_read_w  = 1'b1;
-                counter_w   = (counter_r == 1) ? 0 : counter_w + 1;
+                counter_w   = (counter_r == 1) ? 2'd0 : counter_w + 1;
+            end
+        end
+        S_QTXDT: begin
+            if (avm_waitrequest || !avm_readdata[TX_OK_BIT]) begin
+                rs_addr_w   = STATUS_BASE;
+                avm_read_w  = 1'b1;
+            end
+            else begin
+                rs_addr_w   = TX_BASE;
+                avm_write_w = 1'b1;
+                rs_wdata_w  = SRAM_rdata[{counter_r[0], 3'b0} +: 8];
             end
         end
         S_TXDT : begin
             if (avm_waitrequest) begin
                 rs_addr_w   = TX_BASE;
                 avm_write_w = 1'b1;
-                rs_wdata_w  = SRAM_rdata[(counter_r)<<3 +: 8];
+                rs_wdata_w  = SRAM_rdata[{counter_r[0], 3'b0} +: 8];
             end
             else begin
                 if (counter_r == 0) begin
@@ -341,10 +359,12 @@ always_comb begin
                 end
                 else begin
                     counter_w = 0;
-                    load_size_w = load_size_r - 1;
-                    top_addr_w = top_addr_r + 1;
+                    load_size_w = load_size_r - 1'b1;
+                    top_addr_w = top_addr_r + 1'b1;
                 end
             end
+        end
+        default : begin
         end
     endcase
 end
@@ -435,13 +455,14 @@ logic [VARBW  :0] varsize_r, varsize_w, varsize_x2_r, varsize_x1_r, varsize_x1_w
 logic [ADRBW-1:0] x1_addr_r, x2_addr_r, x1_addr_w, x2_addr_w, x3_addr_r, x3_addr_w;
 logic [WRDBW  :0] data_r, data_w;
 logic [ADRBW-1:0] addr_r, addr_w;
-logic [ADRBW-1:0] size3_r, size3_w;
+logic [VARBW-1:0] size3_r, size3_w;
 logic             is_sub_r, is_sub_w;
 
 assign o_wen = (state_r == S_STORE) || (state_r == S_CARRY);
 assign o_addr = addr_r;
 assign o_wdata = data_r[WRDBW-1:0];
 assign o_done = (state_r == S_IDLE) && !i_valid;
+assign o_varsize_x3 = size3_r;
 assign is_sub_w = (state_r == S_IDLE) ? i_sub : is_sub_r;
 
 always_comb begin
@@ -479,46 +500,48 @@ always_comb begin
             x3_addr_w = i_x3addr;
         end
         S_LOAD: begin
-            varsize_x1_w = i_varsize_x1;
-            varsize_x2_w = i_varsize_x2;
+            varsize_x1_w = varsize_x1_r;
+            varsize_x2_w = varsize_x2_r;
             varsize_w = varsize_r;
             data_w    = (varsize_x1_r == 0) ? data_r : i_rdata + data_r;
             addr_w    = x2_addr_r;
-            x1_addr_w = x1_addr_r + 1;
+            x1_addr_w = x1_addr_r + 1'b1;
             x2_addr_w = x2_addr_r;
             x3_addr_w = x3_addr_r;
         end
         S_ADD: begin
-            varsize_x1_w = i_varsize_x1;
-            varsize_x2_w = i_varsize_x2;
+            varsize_x1_w = varsize_x1_r;
+            varsize_x2_w = varsize_x2_r;
             varsize_w = varsize_r;
             data_w    = (varsize_x2_r == 0) ? data_r : i_rdata + data_r;
             addr_w    = x3_addr_r;
             x1_addr_w = x1_addr_r;
-            x2_addr_w = x2_addr_r + 1;
+            x2_addr_w = x2_addr_r + 1'b1;
             x3_addr_w = x3_addr_r;
         end
         S_SUB: begin
-            varsize_x1_w = i_varsize_x1;
-            varsize_x2_w = i_varsize_x2;
+            varsize_x1_w = varsize_x1_r;
+            varsize_x2_w = varsize_x2_r;
             varsize_w = varsize_r;
             data_w    = (varsize_x2_r == 0) ? {1'b0, {WRDBW{1'b1}}} + data_r : {1'b0, ~i_rdata} + data_r;
             addr_w    = x3_addr_r;
             x1_addr_w = x1_addr_r;
-            x2_addr_w = x2_addr_r + 1;
+            x2_addr_w = x2_addr_r + 1'b1;
             x3_addr_w = x3_addr_r;
         end
         S_STORE: begin
-            varsize_x1_w = (varsize_x1_r == 0) ? 0 : varsize_x1_r - 1;
-            varsize_x2_w = (varsize_x2_r == 0) ? 0 : varsize_x2_r - 1;
-            varsize_w = varsize_r - 1;
+            varsize_x1_w = (varsize_x1_r == 0) ? {(VARBW+1){1'b0}} : varsize_x1_r - 1;
+            varsize_x2_w = (varsize_x2_r == 0) ? {(VARBW+1){1'b0}} : varsize_x2_r - 1;
+            varsize_w = varsize_r - 1'b1;
             data_w    = data_r >> WRDBW;
             addr_w    = (state_w == S_CARRY) ? (x3_addr_r + 1) : x1_addr_r;
             x1_addr_w = x1_addr_r;
             x2_addr_w = x2_addr_r;
-            x3_addr_w = x3_addr_r + 1;
+            x3_addr_w = x3_addr_r + 1'b1;
         end
         S_CARRY: begin
+            varsize_x1_w = varsize_x1_r;
+            varsize_x2_w = varsize_x2_r;
             varsize_w = varsize_r;
             data_w    = data_r;
             addr_w    = addr_r;
@@ -538,6 +561,8 @@ end
 always_ff @(posedge i_clk or negedge i_rst_n) begin
     if (!i_rst_n) begin
         state_r <= S_IDLE;
+        varsize_x1_r <= 0;
+        varsize_x2_r <= 0;
         varsize_r <= 0;
         data_r <= 0;
         x1_addr_r <= 0;
@@ -549,6 +574,8 @@ always_ff @(posedge i_clk or negedge i_rst_n) begin
     end
     else begin
         state_r <= state_w;
+        varsize_x1_r <= varsize_x1_w;
+        varsize_x2_r <= varsize_x2_w;
         varsize_r <= varsize_w;
         data_r <= data_w;
         x1_addr_r <= x1_addr_w;
