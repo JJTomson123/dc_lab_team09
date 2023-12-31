@@ -47,9 +47,9 @@ localparam DIV   = 4'b0011;
 localparam LOAD  = 4'b0100;
 localparam STORE = 4'b0101;
 
-localparam RX_BASE     = 0*4;
-localparam TX_BASE     = 1*4;
-localparam STATUS_BASE = 2*4;
+localparam RX_BASE     = 5'd0;
+localparam TX_BASE     = 5'd4;
+localparam STATUS_BASE = 5'd8;
 localparam TX_OK_BIT   = 6;
 localparam RX_OK_BIT   = 7;
 
@@ -88,7 +88,7 @@ assign o_SRAM_CE_N = 1'b0;
 assign o_SRAM_OE_N = 1'b0;
 assign o_SRAM_LB_N = 1'b0;
 assign o_SRAM_UB_N = 1'b0;
-assign o_state     = state_r;
+assign o_state     = nxt_addr_r;
 
 assign add_sub = (inst_r==SUB);
 
@@ -451,7 +451,7 @@ localparam S_STORE = 3'd3;
 localparam S_CARRY = 3'd4;
 
 logic [2      :0] state_r, state_w;
-logic [VARBW  :0] varsize_r, varsize_w, varsize_x2_r, varsize_x1_r, varsize_x1_w, varsize_x2_w;
+logic [VARBW-1:0] varsize_r, varsize_w, varsize_x2_r, varsize_x1_r, varsize_x1_w, varsize_x2_w;
 logic [ADRBW-1:0] x1_addr_r, x2_addr_r, x1_addr_w, x2_addr_w, x3_addr_r, x3_addr_w;
 logic [WRDBW  :0] data_r, data_w;
 logic [ADRBW-1:0] addr_r, addr_w;
@@ -499,7 +499,7 @@ always_comb begin
             x3_addr_w = i_x3addr;
         end
         S_LOAD: begin
-            varsize_x1_w = varsize_x1_r;
+            varsize_x1_w = (varsize_x1_r == 0) ? varsize_x1_r : varsize_x1_r - 1'b1;
             varsize_x2_w = varsize_x2_r;
             varsize_w = varsize_r;
             data_w    = (varsize_x1_r == 0) ? data_r : i_rdata + data_r;
@@ -510,7 +510,7 @@ always_comb begin
         end
         S_ADD: begin
             varsize_x1_w = varsize_x1_r;
-            varsize_x2_w = varsize_x2_r;
+            varsize_x2_w = (varsize_x2_r == 0) ? varsize_x2_r : varsize_x2_r - 1'b1;
             varsize_w = varsize_r;
             data_w    = (varsize_x2_r == 0) ? data_r : i_rdata + data_r;
             addr_w    = x3_addr_r;
@@ -520,7 +520,7 @@ always_comb begin
         end
         S_SUB: begin
             varsize_x1_w = varsize_x1_r;
-            varsize_x2_w = varsize_x2_r;
+            varsize_x2_w = (varsize_x2_r == 0) ? varsize_x2_r : varsize_x2_r - 1'b1;
             varsize_w = varsize_r;
             data_w    = (varsize_x2_r == 0) ? {1'b0, {WRDBW{1'b1}}} + data_r : {1'b0, ~i_rdata} + data_r;
             addr_w    = x3_addr_r;
@@ -529,11 +529,11 @@ always_comb begin
             x3_addr_w = x3_addr_r;
         end
         S_STORE: begin
-            varsize_x1_w = (varsize_x1_r == 0) ? {(VARBW+1){1'b0}} : varsize_x1_r - 1;
-            varsize_x2_w = (varsize_x2_r == 0) ? {(VARBW+1){1'b0}} : varsize_x2_r - 1;
+            varsize_x1_w = varsize_x1_r;
+            varsize_x2_w = varsize_x2_r;
             varsize_w = varsize_r - 1'b1;
             data_w    = data_r >> WRDBW;
-            addr_w    = (state_w == S_CARRY) ? (x3_addr_r + 1) : x1_addr_r;
+            addr_w    = (state_w == S_CARRY) ? (x3_addr_r + 1'b1) : x1_addr_r;
             x1_addr_w = x1_addr_r;
             x2_addr_w = x2_addr_r;
             x3_addr_w = x3_addr_r + 1'b1;
@@ -612,41 +612,56 @@ module MultUnit #(
     output             o_done
 );
 
-localparam S_IDLE  = 3'd0;
-localparam S_LOAD  = 3'd1;
-localparam S_MUL   = 3'd2;
-localparam S_SUM   = 3'd3;
-localparam S_STORE = 3'd4;
-localparam S_CARRY = 3'd5;
+localparam S_IDLE  = 4'd0;
+localparam S_LOAD  = 4'd1;
+localparam S_MUL   = 4'd2;
+localparam S_SUM   = 4'd3;
+localparam S_STORE = 4'd4;
+localparam S_UWEN  = 4'd5;
+localparam S_CPREP = 4'd6;
+localparam S_CARRY = 4'd7;
+localparam S_UCWEN = 4'd8;
 
-logic [VARBW  :0] varsize_x2_r, varsize_x1_r, varsize_x1_w, varsize_x2_w;
+logic [VARBW-1:0] varsize_x2_r, varsize_x1_r, varsize_x1_w, varsize_x2_w;
+logic [VARBW-1:0] varsize_x3_r, varsize_x3_w;
 logic [ADRBW-1:0] x1_addr_r, x2_addr_r, x1_addr_w, x2_addr_w, x3_addr_r, x3_addr_w, prod_addr_r, prod_addr_w;
 logic [WRDBW*2-1  :0] data_r, data_w;
 logic [ADRBW-1:0] addr_r, addr_w;
-logic [2 :0] state_r, state_w;
+logic [3 :0] state_r, state_w;
 logic [WRDBW-1 :0] x1_data_w, x1_data_r;
-logic first_row_r, first_row_w;
+logic first_row_r, first_row_w, wen_r, wen_w;
 logic [ADRBW-1:0] nxtaddr_r, nxtaddr_w;
 
-assign o_wen   = (state_r == S_STORE) || (state_r == S_CARRY);
+assign o_wen   = wen_r;
 assign o_addr  = addr_r;
 assign o_wdata = data_r[WRDBW-1:0];
-assign o_varsize_x3 = i_varsize_x1 + i_varsize_x2;
+assign o_varsize_x3 = varsize_x3_r;
 assign o_done  = (state_r == S_IDLE) && !i_valid;
+
+always_comb begin
+    case (state_r)
+        S_IDLE:  varsize_x3_w = i_valid ? i_varsize_x1 + i_varsize_x2 - 1'b1 : varsize_x3_r;
+        S_UCWEN: varsize_x3_w = (varsize_x1_r == 0 && data_r != 0) ? varsize_x3_r + 1'b1 : varsize_x3_r;
+        default: varsize_x3_w = varsize_x3_r;
+    endcase
+end
 
 always_comb begin
     case (state_r)
         S_IDLE: state_w = i_valid ? S_LOAD : S_IDLE;
         S_LOAD: state_w = S_MUL;
-        S_MUL : state_w = first_row_r ? S_STORE : S_SUM;
-        S_SUM: state_w = S_STORE;
-        S_STORE: begin
-            if (~|varsize_x2_r || varsize_x2_r[VARBW]) state_w = S_CARRY;
-            else                                       state_w = S_MUL;
+        S_MUL : state_w = S_SUM;
+        S_SUM : state_w = S_STORE;
+        S_STORE: state_w = S_UWEN;
+        S_UWEN: begin
+            if (varsize_x2_r == 0) state_w = S_CPREP;
+            else                   state_w = S_MUL;
         end
-        S_CARRY: begin
-            if (~|varsize_x1_r || varsize_x1_r[VARBW]) state_w = S_IDLE;
-            else                                       state_w = S_LOAD;
+        S_CPREP: state_w = S_CARRY;
+        S_CARRY: state_w = S_UCWEN;
+        S_UCWEN: begin
+            if (varsize_x1_r == 0) state_w = S_IDLE;
+            else                   state_w = S_LOAD;
         end
         default: state_w = S_IDLE;
     endcase
@@ -654,6 +669,17 @@ end
 
 
 always_comb begin
+    varsize_x1_w = varsize_x1_r;
+    varsize_x2_w = varsize_x2_r;
+    x1_data_w    = x1_data_r;
+    data_w       = data_r;
+    addr_w       = addr_r;
+    x1_addr_w    = x1_addr_r;
+    x2_addr_w    = x2_addr_r;
+    x3_addr_w    = x3_addr_r;
+    prod_addr_w  = prod_addr_r;
+    first_row_w  = first_row_r;
+    wen_w        = 1'b0;
     case(state_r)
         S_IDLE: begin
             varsize_x1_w = i_varsize_x1;
@@ -668,64 +694,49 @@ always_comb begin
             first_row_w = 1'b1;
         end
         S_LOAD: begin
-            varsize_x1_w = varsize_x1_r - 1;
-            varsize_x2_w = varsize_x2_r;
+            varsize_x1_w = varsize_x1_r - 1'b1;
             x1_data_w = i_rdata;
-            data_w    = data_r;
             addr_w    = x2_addr_r;
-            x1_addr_w = x1_addr_r + 1;
-            x2_addr_w = x2_addr_r;
-            x3_addr_w = x3_addr_r;
-            prod_addr_w = prod_addr_r + 1;
-            first_row_w = first_row_r;
+            x1_addr_w = x1_addr_r + 1'b1;
+            prod_addr_w = prod_addr_r + 1'b1;
         end
         S_MUL: begin
-            varsize_x1_w = varsize_x1_r;
-            varsize_x2_w = varsize_x2_r - 1;
-            x1_data_w = x1_data_r;
+            varsize_x2_w = varsize_x2_r - 1'b1;
             data_w    = i_rdata * x1_data_r + data_r;
             addr_w    = x3_addr_r;
-            x1_addr_w = x1_addr_r;
-            x2_addr_w = x2_addr_r + 1;
-            x3_addr_w = x3_addr_r;
-            prod_addr_w = prod_addr_r;
-            first_row_w = first_row_r;
+            x2_addr_w = x2_addr_r + 1'b1;
         end
         S_SUM: begin
-            varsize_x1_w = varsize_x1_r;
-            varsize_x2_w = varsize_x2_r;
-            x1_data_w = x1_data_r;
-            data_w    = i_rdata + data_r;
-            addr_w    = addr_r;
-            x1_addr_w = x1_addr_r;
-            x2_addr_w = x2_addr_r;
-            x3_addr_w = x3_addr_r;
-            prod_addr_w = prod_addr_r;
-            first_row_w = first_row_r;
+            data_w = first_row_r ? data_r : i_rdata + data_r;
+            wen_w  = 1'b1;
         end
         S_STORE: begin
             varsize_x1_w = varsize_x1_r;
             varsize_x2_w = varsize_x2_r;
             x1_data_w = x1_data_r;
-            data_w    = data_r >> WRDBW;
-            addr_w    = (state_w == S_CARRY) ? (x3_addr_r + 1) : x2_addr_r;
+            addr_w    = addr_r;
             x1_addr_w = x1_addr_r;
             x2_addr_w = x2_addr_r;
-            x3_addr_w = x3_addr_r + 1;
+            x3_addr_w = x3_addr_r + 1'b1;
             prod_addr_w = prod_addr_r;
             first_row_w = first_row_r;
         end
+        S_UWEN: begin
+            data_w = data_r >> WRDBW;
+            addr_w = (varsize_x2_r == 0) ? x3_addr_r : x2_addr_r;
+        end
+        S_CPREP: begin
+            wen_w       = 1'b1;
+        end
         S_CARRY: begin
-            varsize_x1_w = varsize_x1_r;
             varsize_x2_w = i_varsize_x2;
-            x1_data_w = x1_data_r;
-            data_w    = {(WRDBW*2){1'b0}};
-            addr_w    = x1_addr_r;
-            x1_addr_w = x1_addr_r;
             x2_addr_w = i_x2addr;
             x3_addr_w = prod_addr_r;
-            prod_addr_w = prod_addr_r;
             first_row_w = 1'b0;
+        end
+        S_UCWEN: begin
+            data_w    = {(WRDBW*2){1'b0}};
+            addr_w    = x1_addr_r;
         end
     endcase
 end
@@ -735,6 +746,7 @@ always_ff @(posedge i_clk or negedge i_rst_n) begin
         state_r <= S_IDLE;
         varsize_x1_r <= 0;
         varsize_x2_r <= 0;
+        varsize_x3_r <= 0;
         x1_data_r <= 0;
         data_r <= 0;
         x1_addr_r <= 0;
@@ -743,11 +755,13 @@ always_ff @(posedge i_clk or negedge i_rst_n) begin
         addr_r <= 0;
         prod_addr_r <= 0;
         first_row_r <= 0;
+        wen_r <= 1'b0;
     end
     else begin
         state_r <= state_w;
         varsize_x1_r <= varsize_x1_w;
         varsize_x2_r <= varsize_x2_w;
+        varsize_x3_r <= varsize_x3_w;
         x1_data_r <= x1_data_w;
         data_r <= data_w;
         x1_addr_r <= x1_addr_w;
@@ -756,6 +770,7 @@ always_ff @(posedge i_clk or negedge i_rst_n) begin
         addr_r <= addr_w;
         prod_addr_r <= prod_addr_w;
         first_row_r <= first_row_w;
+        wen_r <= wen_w;
     end
 end
 
@@ -763,7 +778,7 @@ end
 endmodule
 
 
-module DivUnit #(
+/* module DivUnit #(
     parameter ADRBW = 20,
     parameter WRDBW = 16,
     parameter VARBW = 16
@@ -783,4 +798,4 @@ module DivUnit #(
     output             o_done
 );
 
-endmodule
+endmodule */

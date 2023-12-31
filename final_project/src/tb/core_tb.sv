@@ -14,15 +14,15 @@ logic [15:0] rdata, wdata;
 logic [15:0] sram [0:15];
 
 initial begin
-	varsize1 = 16'd4;
-	varsize2 = 16'd3;
+	varsize1 = 16'd2;
+	varsize2 = 16'd2;
 	x1addr = 20'd0;
-	x2addr = 20'd5;
+	x2addr = 20'd2;
 	x3addr = 20'd10;
 end
 
 always @(posedge clk or negedge rst_n) begin
-	if (!rst_n) sram[0:7] <= '{16'h4430, 16'h14D4, 16'h3540, 16'hB7F1, 16'bx, 16'h6B75, 16'hB0AC, 16'h94A8
+	if (!rst_n) sram[0:7] <= '{16'hd20c, 16'h83d3, 16'h8d69, 16'hf028, 16'bx, 16'h6B75, 16'hB0AC, 16'h94A8
 							   };
 	else if (enable) sram[addr[3:0]] <= wdata;
 end
