@@ -1,6 +1,6 @@
 store 0 8192
-store 1 8191
-sub 2 0 1
+store 1 8192
+mul 2 0 1
 load 2
 load 0
 load 1

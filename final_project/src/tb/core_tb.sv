@@ -53,7 +53,7 @@ AdderUnit  #(
 
 	initial begin
 		$fsdbDumpfile("final_project_adder.fsdb");
-		$fsdbDumpvars;
+		$fsdbDumpvars("+all");
 		
 		rst_n = 0;
 		#(2*CLK)

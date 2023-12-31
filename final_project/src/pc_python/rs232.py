@@ -25,9 +25,9 @@ opcode = {
     "store": 5
 }
 
-assert len(argv) == 2
+assert len(argv) == 3
 s = Serial(
-    port=argv[1],
+    port=argv[2],
     baudrate=115200,
     bytesize=EIGHTBITS,
     parity=PARITY_NONE,
@@ -36,7 +36,7 @@ s = Serial(
     rtscts=False
 )
 
-with open('tb_2.txt', 'r') as fp_inst, open('bytecode.bin', 'wb') as fp_o_bc, open('dat.bin', 'wb') as fp_o_data, open('gold.bin', 'wb') as fp_o_gold:
+with open(argv[1], 'r') as fp_inst, open('bytecode.bin', 'wb') as fp_o_bc, open('dat.bin', 'wb') as fp_o_data, open('gold.bin', 'wb') as fp_o_gold:
 
     variable_bytes = [""] * 16
     variables = [0] * 16
@@ -49,7 +49,8 @@ with open('tb_2.txt', 'r') as fp_inst, open('bytecode.bin', 'wb') as fp_o_bc, op
             print "store variable",
             print index,
             print "of size",
-            print size
+            print size,
+            print "words"
             variabe_sizes[index] = size
             while (True):
                 variable_bytes[index] = os.urandom(size * 2)
@@ -69,8 +70,9 @@ with open('tb_2.txt', 'r') as fp_inst, open('bytecode.bin', 'wb') as fp_o_bc, op
             print "load variable",
             print index,
             print "of size",
-            print size
-            if (size != len(variable_bytes[index]) / 2):
+            print size,
+            print "words"
+            if (size < len(variable_bytes[index]) / 2):
                 print "Error! size mismatch!"
             received = s.read(size * 2)
             fp_o_data.write(received)
